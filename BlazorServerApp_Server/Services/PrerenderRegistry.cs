@@ -1,22 +1,22 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using Microsoft.AspNetCore.Components; 
+using Microsoft.AspNetCore.Components;
 
 namespace BlazorServerApp_Server.Services
 {
-
     namespace BlazorServerApp_Server.Services
     {
         public class PrerenderRegistry
         {
-            private readonly ConcurrentDictionary<Type, byte> _activePrerenderedPages = new ConcurrentDictionary<Type, byte>();
+            private readonly ConcurrentDictionary<Type, byte> _activePrerenderedPages =
+                new ConcurrentDictionary<Type, byte>();
 
-            private readonly Dictionary<string, Type> _tableToComponentMapping = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
-        {
-            {"Weather", typeof(Components.Pages.Weather)}, 
-
-        };
+            private readonly Dictionary<string, Type> _tableToComponentMapping =
+                new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "Weather", typeof(Components.Pages.Weather) },
+                };
 
 
             public void RegisterPageForPrerendering(Type componentType)
@@ -25,7 +25,8 @@ namespace BlazorServerApp_Server.Services
                 {
                     throw new ArgumentException("Provided type must be a Blazor component.", nameof(componentType));
                 }
-                _activePrerenderedPages.TryAdd(componentType, 0); 
+
+                _activePrerenderedPages.TryAdd(componentType, 0);
                 Console.WriteLine($"[PrerenderRegistry] Registered: {componentType.Name}");
             }
 
