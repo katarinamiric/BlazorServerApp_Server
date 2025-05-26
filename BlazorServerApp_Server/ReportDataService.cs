@@ -10,11 +10,14 @@ namespace BlazorServerApp_Server.Services
     public class ReportDataService
     {
         private readonly ILogger<ReportDataService> _logger;
+        private readonly ApplicationDbContext _context;
         private static readonly Random _random = new Random();
 
-        public ReportDataService(ILogger<ReportDataService> logger)
+
+        public ReportDataService(ILogger<ReportDataService> logger, ApplicationDbContext context)
         {
             _logger = logger;
+            _context = context;
         }
 
         public async Task<ReportData> GetComplexReportDataAsync()
@@ -33,6 +36,7 @@ namespace BlazorServerApp_Server.Services
             }
 
             _logger.LogInformation($"ReportDataService: Complex report data generated after {delaySeconds} seconds.");
+
 
             return new ReportData
             {

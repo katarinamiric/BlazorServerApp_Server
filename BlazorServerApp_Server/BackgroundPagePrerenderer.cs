@@ -129,15 +129,7 @@ namespace BlazorServerApp_Server
 
             try
             {
-                // --- Step 1: Render the HTML of the component ---
-                html = await _renderer.Dispatcher.InvokeAsync(async () =>
-                {
-                    // RenderComponentAsync handles injecting services into the component itself
-                    var result = await _renderer.RenderComponentAsync<TComponent>(ParameterView.Empty);
-                    using var writer = new StringWriter();
-                    result.WriteHtmlTo(writer);
-                    return writer.ToString();
-                });
+   
 
                 // --- Step 2: Fetch Page-Specific Data using the predefined mapping ---
                 // We fetch data in a separate scope to ensure services are correctly resolved
@@ -161,17 +153,27 @@ namespace BlazorServerApp_Server
                 }
 
                 _logger.LogInformation($"[Prerender] {pageName} HTML: {html?.Length ?? 0} characters. Data fetched: {pageData != null}.");
-
-                // --- Step 3: Store HTML and Data in Cache ---
-                if (html != null)
-                {
-                    _cache.Set(pageName, html); // Cache key is the page's component name
-                }
                 if (pageData != null)
                 {
                     _cache.Set($"{pageName}_Data", pageData); // This now works!
                 }
+                // --- Step 3: Store HTML and Data in Cache ---
+                
+              
+                // --- Step 1: Render the HTML of the component ---
+                html = await _renderer.Dispatcher.InvokeAsync(async () =>
+                {
+                    // RenderComponentAsync handles injecting services into the component itself
+                    var result = await _renderer.RenderComponentAsync<TComponent>(ParameterView.Empty);
+                    using var writer = new StringWriter();
+                    result.WriteHtmlTo(writer);
+                    return writer.ToString();
+                });
 
+                if (html != null)
+                {
+                    _cache.Set(pageName, html); // Cache key is the page's component name
+                }
                 Console.WriteLine($"✅ {pageName} was prerendered and cached.");
             }
             catch (Exception ex)
