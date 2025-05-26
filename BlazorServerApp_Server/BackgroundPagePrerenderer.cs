@@ -122,13 +122,7 @@ namespace BlazorServerApp_Server
 
             try
             {
-                html = await _renderer.Dispatcher.InvokeAsync(async () =>
-                {
-                    var result = await _renderer.RenderComponentAsync<TComponent>(ParameterView.Empty);
-                    using var writer = new StringWriter();
-                    result.WriteHtmlTo(writer);
-                    return writer.ToString();
-                });
+   
 
                 if (_prerenderDataFetchers.TryGetValue(typeof(TComponent), out var dataFetcher))
                 {
@@ -146,16 +140,27 @@ namespace BlazorServerApp_Server
                 }
 
                 _logger.LogInformation($"[Prerender] {pageName} HTML: {html?.Length ?? 0} characters. Data fetched: {pageData != null}.");
+                if (pageData != null)
+                {
+                    _cache.Set($"{pageName}_Data", pageData); // This now works!
+                }
+                // --- Step 3: Store HTML and Data in Cache ---
+                
+              
+                // --- Step 1: Render the HTML of the component ---
+                html = await _renderer.Dispatcher.InvokeAsync(async () =>
+                {
+                    // RenderComponentAsync handles injecting services into the component itself
+                    var result = await _renderer.RenderComponentAsync<TComponent>(ParameterView.Empty);
+                    using var writer = new StringWriter();
+                    result.WriteHtmlTo(writer);
+                    return writer.ToString();
+                });
 
                 if (html != null)
                 {
                     _cache.Set(pageName, html);
                 }
-                if (pageData != null)
-                {
-                    _cache.Set($"{pageName}_Data", pageData); 
-                }
-
                 Console.WriteLine($"✅ {pageName} was prerendered and cached.");
             }
             catch (Exception ex)
