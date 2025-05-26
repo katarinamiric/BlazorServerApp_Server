@@ -1,8 +1,7 @@
-﻿// Services/SqlServiceBrokerListener.cs
-using BlazorServerApp_Server.Hubs;
+﻿using BlazorServerApp_Server.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.DependencyInjection; // NEW: Needed for IServiceScopeFactory
+using Microsoft.Extensions.DependencyInjection; 
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
@@ -20,20 +19,19 @@ namespace BlazorServerApp_Server.Services
         private readonly ILogger<SqlServiceBrokerListener> _logger;
         private readonly string _connectionString;
         private readonly string _targetQueueName = "WeatherForecastChange_TargetQueue";
-        // REMOVED: BackgroundPagePrerenderer and PrerenderRegistry are no longer directly injected
-        private readonly IServiceScopeFactory _scopeFactory; // NEW: Inject IServiceScopeFactory
+        private readonly IServiceScopeFactory _scopeFactory; 
 
         public SqlServiceBrokerListener(
             IHubContext<WeatherHub> hubContext,
             ILogger<SqlServiceBrokerListener> logger,
             IConfiguration configuration,
-            IServiceScopeFactory scopeFactory) // NEW: Inject IServiceScopeFactory
+            IServiceScopeFactory scopeFactory) 
         {
             _hubContext = hubContext;
             _logger = logger;
             _connectionString = configuration.GetConnectionString("DefaultConnection")
                                 ?? throw new ArgumentNullException("DefaultConnection connection string not found.");
-            _scopeFactory = scopeFactory; // NEW: Assign it
+            _scopeFactory = scopeFactory; 
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -42,11 +40,9 @@ namespace BlazorServerApp_Server.Services
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Each iteration of the loop (each time you process a message)
-                // should operate within its own scope for Scoped services.
-                using (var scope = _scopeFactory.CreateScope()) // NEW: Create a new scope
+                using (var scope = _scopeFactory.CreateScope()) 
                 {
-                    // Resolve Scoped services from the newly created scope 
+
                     var prerenderer = scope.ServiceProvider.GetRequiredService<BackgroundPagePrerenderer>();
                     var prerenderRegistry = scope.ServiceProvider.GetRequiredService<PrerenderRegistry>();
 
@@ -82,18 +78,18 @@ namespace BlazorServerApp_Server.Services
 
                                         if (!string.IsNullOrEmpty(changedTableName))
                                         {
-                                            var affectedComponentType = prerenderRegistry.GetComponentTypeForTable(changedTableName); // Use resolved registry
+                                            var affectedComponentType = prerenderRegistry.GetComponentTypeForTable(changedTableName);
 
                                             if (affectedComponentType != null)
                                             {
-                                                if (prerenderRegistry.IsPageActivelyPrerendered(affectedComponentType)) // Use resolved registry
+                                                if (prerenderRegistry.IsPageActivelyPrerendered(affectedComponentType)) 
                                                 {
                                                     _logger.LogInformation($"DB change detected for {changedTableName}. Page {affectedComponentType.Name} is actively prerendered. Re-prerendering...");
                                                     var prerenderMethod = typeof(BackgroundPagePrerenderer)
                                                         .GetMethod(nameof(BackgroundPagePrerenderer.PrerenderComponentAsync))!
                                                         .MakeGenericMethod(affectedComponentType);
 
-                                                    await (Task)prerenderMethod.Invoke(prerenderer, null)!; // Use resolved prerenderer
+                                                    await (Task)prerenderMethod.Invoke(prerenderer, null)!; 
 
                                                     await _hubContext.Clients.All.SendAsync("ReceivePageUpdate", affectedComponentType.Name, stoppingToken);
                                                     _logger.LogInformation($"Notified clients of '{affectedComponentType.Name}' page update.");
@@ -131,7 +127,7 @@ namespace BlazorServerApp_Server.Services
                         _logger.LogError(ex, "Error in SQL Service Broker Listener.");
                         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
                     }
-                } // The scope is disposed here, releasing all Scoped services created within it.
+                }
             }
             _logger.LogInformation("SQL Service Broker Listener stopped.");
         }
