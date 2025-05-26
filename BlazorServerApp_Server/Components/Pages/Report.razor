@@ -1,0 +1,82 @@
+﻿@page "/report"
+@using BlazorServerApp_Server.Data
+@using BlazorServerApp_Server.Services
+@inject ReportDataService ReportDataService
+@inject HtmlCache Cache
+@inject ILogger<Report> Logger
+
+<PageTitle>Heavy Report</PageTitle>
+
+<h1>@reportData.Title</h1>
+
+<p>This page demonstrates a scenario where data fetching can be slow. Your prerendering solution helps here!</p>
+
+@if (reportData.GeneratedAt == default(DateTime)) // Initial state, data not loaded yet
+{
+    <div class="loading-indicator">
+        <p><em>Loading complex report data... Please wait.</em></p>
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p>This delay simulates a slow database query or API call.</p>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="card-header">
+            Report Details
+        </div>
+        <div class="card-body">
+            <h5 class="card-title">@reportData.Content</h5>
+            <p class="card-text">
+                Report generated at: <strong>@reportData.GeneratedAt.ToString("HH:mm:ss.fff")</strong>
+            </p>
+            <p class="card-text">
+                Data loaded from: <strong>@reportData.DataSource</strong>
+            </p>
+            <p class="card-text">Total detail items: <strong>@reportData.TotalItems</strong></p>
+        </div>
+    </div>
+
+    <h3 class="mt-4">Detail Items:</h3>
+    <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+        @foreach (var detail in reportData.Details)
+        {
+            <div class="list-group-item">@detail</div>
+        }
+    </div>
+}
+
+@code {
+    private ReportData reportData = new ReportData();
+    private bool isInitialLoad = true; // Flag to track if it's the very first render cycle
+
+    // This parameter will receive the prerendered data from BackgroundPagePrerenderer
+    [Parameter]
+    public ReportData? InitialData { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("HeavyReport: OnInitializedAsync called.");
+
+        // Check if InitialData was supplied (meaning it came from prerendering)
+        // and if it's the first time OnInitializedAsync runs for this instance.
+        if (isInitialLoad && InitialData != null)
+        {
+            reportData = InitialData;
+            reportData.DataSource = "Server Prerendered (from parameter)";
+            Logger.LogInformation($"HeavyReport: Loaded from prerendered InitialData at {DateTime.Now:HH:mm:ss.fff}");
+        }
+        else
+        {
+            // If InitialData was not supplied, or if it's a subsequent client-side refresh/navigation,
+            // fetch fresh data.
+            Logger.LogInformation($"HeavyReport: Fetching data (client-side or refresh) at {DateTime.Now:HH:mm:ss.fff}");
+            reportData = await ReportDataService.GetComplexReportDataAsync();
+            reportData.DataSource = "Client-side (fresh fetch)";
+        }
+
+        isInitialLoad = false; // Mark that the initial load is done
+    }
+}

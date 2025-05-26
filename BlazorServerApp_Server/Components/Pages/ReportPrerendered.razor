@@ -1,0 +1,48 @@
+﻿@page "/heavy-report" // This is the public-facing route
+
+@inject HtmlCache Cache
+@inject ILogger<Report> Logger
+
+<PageTitle>Heavy Report</PageTitle>
+
+@if (hasCachedHtml)
+{
+    @* Display the cached HTML directly *@
+    Logger.LogInformation($"HeavyReport: Displaying HTML from cache for HeavyReport.");
+    @((MarkupString)cachedHtml)
+    @* Optional: Clear data if this is a one-time view or if you want to force re-prerender on next access *@
+    @* Cache.ClearData("HeavyReport"); *@
+    @* Cache.ClearData("HeavyReport_Data"); *@
+}
+else
+{
+    @* If no cached HTML, render the "live" version of the component directly *@
+    Logger.LogWarning($"HeavyReport: Cache miss for HeavyReport. Rendering live version.");
+    <p><em>Prerendered content not available. Loading live data...</em></p>
+
+    @* IMPORTANT: Directly render the HeavyReportLive component here.
+       It will then execute its own OnInitializedAsync and fetch data. *@
+    <Report />
+}
+
+@code {
+    private string? cachedHtml;
+    private bool hasCachedHtml = false;
+
+    protected override void OnInitialized()
+    {
+        // OnInitialized is suitable for synchronous cache checks
+        Logger.LogInformation("HeavyReport: OnInitialized called to check cache.");
+
+        // Attempt to retrieve the prerendered HTML from cache
+        if (Cache.Get("ReportPrerendered") is string html)
+        {
+            cachedHtml = html;
+            hasCachedHtml = true;
+        }
+        else
+        {
+            hasCachedHtml = false;
+        }
+    }
+}

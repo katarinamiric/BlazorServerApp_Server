@@ -1,0 +1,139 @@
+﻿// Services/SqlServiceBrokerListener.cs
+using BlazorServerApp_Server.Hubs;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.DependencyInjection; // NEW: Needed for IServiceScopeFactory
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Xml.Linq;
+using BlazorServerApp_Server.Hubs.BlazorServerApp_Server.Hubs;
+using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
+
+namespace BlazorServerApp_Server.Services
+{
+    public class SqlServiceBrokerListener : BackgroundService
+    {
+        private readonly IHubContext<WeatherHub> _hubContext;
+        private readonly ILogger<SqlServiceBrokerListener> _logger;
+        private readonly string _connectionString;
+        private readonly string _targetQueueName = "WeatherForecastChange_TargetQueue";
+        // REMOVED: BackgroundPagePrerenderer and PrerenderRegistry are no longer directly injected
+        private readonly IServiceScopeFactory _scopeFactory; // NEW: Inject IServiceScopeFactory
+
+        public SqlServiceBrokerListener(
+            IHubContext<WeatherHub> hubContext,
+            ILogger<SqlServiceBrokerListener> logger,
+            IConfiguration configuration,
+            IServiceScopeFactory scopeFactory) // NEW: Inject IServiceScopeFactory
+        {
+            _hubContext = hubContext;
+            _logger = logger;
+            _connectionString = configuration.GetConnectionString("DefaultConnection")
+                                ?? throw new ArgumentNullException("DefaultConnection connection string not found.");
+            _scopeFactory = scopeFactory; // NEW: Assign it
+        }
+
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("SQL Service Broker Listener starting...");
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                // Each iteration of the loop (each time you process a message)
+                // should operate within its own scope for Scoped services.
+                using (var scope = _scopeFactory.CreateScope()) // NEW: Create a new scope
+                {
+                    // Resolve Scoped services from the newly created scope 
+                    var prerenderer = scope.ServiceProvider.GetRequiredService<BackgroundPagePrerenderer>();
+                    var prerenderRegistry = scope.ServiceProvider.GetRequiredService<PrerenderRegistry>();
+
+                    try
+                    {
+                        using (var connection = new SqlConnection(_connectionString))
+                        {
+                            await connection.OpenAsync(stoppingToken);
+
+                            using (var command = connection.CreateCommand())
+                            {
+                                command.CommandText = $"WAITFOR (RECEIVE TOP(1) message_type_name, message_body FROM {_targetQueueName}), TIMEOUT 60000;";
+                                using (var reader = await command.ExecuteReaderAsync(stoppingToken))
+                                {
+                                    if (reader.Read())
+                                    {
+                                        var messageType = reader.GetString(0);
+                                        var messageBodyBytes = reader.GetSqlBytes(1).Buffer;
+                                        var messageBody = System.Text.Encoding.Unicode.GetString(messageBodyBytes);
+
+                                        _logger.LogInformation($"Received message from DB: Type={messageType}, Body={messageBody}");
+
+                                        string? changedTableName = null;
+                                        try
+                                        {
+                                            var xmlDoc = XDocument.Parse(messageBody);
+                                            changedTableName = xmlDoc.Root?.Element("Table")?.Value;
+                                        }
+                                        catch (Exception parseEx)
+                                        {
+                                            _logger.LogError(parseEx, "Failed to parse messageBody as XML. Ensure trigger sends valid XML.");
+                                        }
+
+                                        if (!string.IsNullOrEmpty(changedTableName))
+                                        {
+                                            var affectedComponentType = prerenderRegistry.GetComponentTypeForTable(changedTableName); // Use resolved registry
+
+                                            if (affectedComponentType != null)
+                                            {
+                                                if (prerenderRegistry.IsPageActivelyPrerendered(affectedComponentType)) // Use resolved registry
+                                                {
+                                                    _logger.LogInformation($"DB change detected for {changedTableName}. Page {affectedComponentType.Name} is actively prerendered. Re-prerendering...");
+                                                    var prerenderMethod = typeof(BackgroundPagePrerenderer)
+                                                        .GetMethod(nameof(BackgroundPagePrerenderer.PrerenderComponentAsync))!
+                                                        .MakeGenericMethod(affectedComponentType);
+
+                                                    await (Task)prerenderMethod.Invoke(prerenderer, null)!; // Use resolved prerenderer
+
+                                                    await _hubContext.Clients.All.SendAsync("ReceivePageUpdate", affectedComponentType.Name, stoppingToken);
+                                                    _logger.LogInformation($"Notified clients of '{affectedComponentType.Name}' page update.");
+                                                }
+                                                else
+                                                {
+                                                    _logger.LogInformation($"DB change detected for {changedTableName}. Page {affectedComponentType.Name} is NOT actively prerendered. Skipping re-prerender.");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                _logger.LogInformation($"DB change detected for {changedTableName}. No Blazor page mapping found for this table. Skipping re-prerender.");
+                                            }
+                                        }
+                                        else
+                                        {
+                                            _logger.LogWarning($"Could not determine changed table from message body: '{messageBody}'. No specific re-prerender triggered.");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        _logger.LogInformation("No message received from queue within timeout.");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (SqlException sqlEx) when (sqlEx.Number == 1222)
+                    {
+                        _logger.LogWarning($"SQL Timeout (1222) while waiting for messages. Retrying... {sqlEx.Message}");
+                        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error in SQL Service Broker Listener.");
+                        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                    }
+                } // The scope is disposed here, releasing all Scoped services created within it.
+            }
+            _logger.LogInformation("SQL Service Broker Listener stopped.");
+        }
+    }
+}

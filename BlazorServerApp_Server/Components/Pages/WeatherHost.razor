@@ -1,0 +1,14 @@
+﻿@page "/weather-prerendered"
+@inject HtmlCache Cache
+
+<h3>Weather (Prerendered)</h3>
+
+@if (Cache.Get("Weather") is string html)
+{
+    @((MarkupString)html)
+    Cache.ClearData("");
+}
+else
+{
+    <p>Loading...</p>
+}
