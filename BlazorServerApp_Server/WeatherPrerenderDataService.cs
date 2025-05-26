@@ -16,7 +16,6 @@ public class WeatherPrerenderDataService : IPrerenderDataService<Weather, string
     {
         using (var scope = _scopeFactory.CreateScope()) // NEW: Create a new scope
         {
-            // Resolve Scoped services from the newly created scope 
             var _context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var reportData = _context.Weather.ToList();
 
