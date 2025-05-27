@@ -114,6 +114,7 @@ namespace BlazorServerApp_Server
             };
         }
 
+
         public async Task PrerenderComponentAsync<TComponent>() where TComponent : IComponent
         {
             var pageName = typeof(TComponent).Name;
@@ -122,8 +123,6 @@ namespace BlazorServerApp_Server
 
             try
             {
-   
-
                 if (_prerenderDataFetchers.TryGetValue(typeof(TComponent), out var dataFetcher))
                 {
                     await _renderer.Dispatcher.InvokeAsync(async () =>

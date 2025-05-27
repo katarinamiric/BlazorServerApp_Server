@@ -16,6 +16,7 @@ namespace BlazorServerApp_Server.Services
                 new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
                 {
                     { "Weather", typeof(Components.Pages.Weather) },
+                    { "Report", typeof(Components.Pages.ReportPrerendered) },
                 };
 
 
