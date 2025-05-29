@@ -2,6 +2,7 @@ using BlazorServerApp_Server;
 using BlazorServerApp_Server.Components;
 using BlazorServerApp_Server.Data;
 using BlazorServerApp_Server.Hubs.BlazorServerApp_Server.Hubs;
+using BlazorServerApp_Server.Middleware;
 using BlazorServerApp_Server.Services;
 using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
 using Microsoft.AspNetCore.Components.Web;
@@ -19,6 +20,12 @@ builder.Services.AddScoped<WeatherPrerenderService>();
 builder.Services.AddHostedService<PrerenderService>();
 builder.Services.AddSingleton<NavigationTracker>();
 builder.Services.AddSingleton<NavigationRuleEngine>();
+builder.Services.AddSingleton<NavigationPredictorService>();
+builder.Services.AddScoped<BrowserHistoryService>();
+builder.Services.AddHttpContextAccessor(); // <-- ADD THIS LINE
+// Program.cs
+builder.Services.AddSingleton<InMemoryPageHistoryService>();
+
 builder.Services.AddScoped<BackgroundPagePrerenderer>();
 builder.Services.AddSingleton<WeatherPrerenderDataService>(); // If WeatherForecastService is used for fetching data
 builder.Services.AddMemoryCache();
@@ -42,7 +49,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseNavigationHistory(); // <-- ADD THIS LINE
 
 app.UseAntiforgery();
 app.MapHub<WeatherHub>("/weatherhub");

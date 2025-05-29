@@ -24,10 +24,12 @@
 </Router>
 
 @code {
+
     [Inject] NavigationTracker NavTracker { get; set; }
     [Inject] NavigationRuleEngine RuleEngine { get; set; }
     [Inject] BackgroundPagePrerenderer Prerenderer { get; set; }
     [Inject] ILogger<Routes> Logger { get; set; }
+    [Inject] BrowserHistoryService BrowserHistory { get; set; }
 
     private async Task OnNavigateAsync(NavigationContext context)
     {
@@ -52,8 +54,9 @@
 
         Logger.LogInformation($"Navigation detected to: {currentPage}. Initiating background prerendering tasks...");
 
-        
-        var pagesToPrerenderUrls = RuleEngine.GetPagesToPrerender(currentPage);
+
+        // var pagesToPrerenderUrls = NavigationPredictorService.PredictNextPages(currentPage);
+        var pagesToPrerenderUrls = await RuleEngine.GetPagesToPrerender(currentPage);
 
         foreach (var pageUrl in pagesToPrerenderUrls)
         {
@@ -100,4 +103,5 @@
             }
         }
     }
+
 }
