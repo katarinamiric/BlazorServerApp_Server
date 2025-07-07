@@ -1,7 +1,6 @@
 ﻿using BlazorServerApp_Server;
 using BlazorServerApp_Server.Components.Pages;
 using BlazorServerApp_Server.Data;
-using Microsoft.EntityFrameworkCore;
 
 public class WeatherPrerenderDataService : IPrerenderDataService<Weather, string[]>
 {

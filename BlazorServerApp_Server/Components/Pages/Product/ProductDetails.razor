@@ -1,0 +1,94 @@
+﻿@page "/product/{id:int}"
+@inject NavigationManager NavManager
+
+<PageTitle>Product Details</PageTitle>
+
+@if (isLoading)
+{
+    <div class="text-center mt-5">
+        <h3>Loading product details...</h3>
+        <p>(Simulating server-side load...)</p>
+    </div>
+}
+else
+{
+    <div class="product-details container mt-4">
+        <h1>@product.Name</h1>
+        <p class="lead">@product.Description</p>
+
+        <div class="carousel d-flex flex-wrap gap-3 mb-4">
+            @foreach (var img in product.ImageUrls)
+            {
+                <img src="@img" class="img-thumbnail" style="width: 300px; height: auto;" />
+            }
+        </div>
+
+        <div class="tabs mt-4">
+            <ul class="nav nav-tabs">
+                <li class="nav-item">
+                    <a class="nav-link @(activeTab == "specs" ? "active" : "")" @onclick="() => activeTab =" specs"">Specifications</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(activeTab == "reviews" ? "active" : "")" @onclick="() => activeTab =" reviews"">Reviews</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(activeTab == "related" ? "active" : "")" @onclick="() => activeTab =" related"">Related Products</a>
+                </li>
+            </ul>
+
+            <div class="tab-content p-3 border border-top-0">
+                @if (activeTab == "specs")
+                {
+                    <ul>
+                        @foreach (var spec in product.Specifications)
+                        {
+                            <li><strong>@spec.Key:</strong> @spec.Value</li>
+                        }
+                    </ul>
+                }
+                else if (activeTab == "reviews")
+                {
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        @foreach (var review in product.Reviews)
+                        {
+                            <div class="border-bottom mb-2 pb-2">
+                                <strong>@review.Author</strong> says:<br />
+                                @review.Content
+                            </div>
+                        }
+                    </div>
+                }
+                else if (activeTab == "related")
+                {
+                    <div class="d-flex flex-wrap gap-3">
+                        @foreach (var related in product.RelatedProducts)
+                        {
+                            <div class="card" style="width: 200px;">
+                                <img src="@related.ImageUrl" class="card-img-top" />
+                                <div class="card-body">
+                                    <h5 class="card-title">@related.Name</h5>
+                                    <p class="card-text">$@related.Price</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ProductModel product;
+    private bool isLoading = true;
+    private string activeTab = "specs";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.Delay(1000); // simulate server delay
+        product = ProductService.GetProductById(Id); // fake service
+        isLoading = false;
+    }
+}

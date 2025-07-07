@@ -16,7 +16,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddSingleton<HtmlCache>();
 builder.Services.AddScoped<HtmlRenderer>();
-builder.Services.AddScoped<WeatherPrerenderService>();
+//builder.Services.AddScoped<WeatherPrerenderService>();
 builder.Services.AddHostedService<PrerenderService>();
 builder.Services.AddSingleton<NavigationTracker>();
 builder.Services.AddSingleton<NavigationRuleEngine>();

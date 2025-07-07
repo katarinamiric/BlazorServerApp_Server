@@ -52,12 +52,6 @@ using BlazorServerApp_Server.Components.Pages; // Assuming your Weather and Coun
 using BlazorServerApp_Server.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using System;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace BlazorServerApp_Server
 {
