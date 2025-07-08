@@ -1,0 +1,11 @@
+{
+  "prerendable-routes": [
+    "/",
+    "/weather",
+    "/counter",
+    "/heavy-report",
+    "/contact",
+    "/weather2",
+    "/product/{id}"
+  ]
+}

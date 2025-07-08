@@ -1,4 +1,6 @@
-﻿using Microsoft.ML;
+﻿using BlazorServerApp_Server.Data;
+using Microsoft.ML;
+using System.Text.Json;
 
 namespace BlazorServerApp_Server.Services
 {
@@ -17,10 +19,17 @@ namespace BlazorServerApp_Server.Services
         private const string MODEL_FILE_NAME = "navigation_prediction_model.zip";
         private string ModelPath => Path.Combine(AppContext.BaseDirectory, MODEL_FILE_NAME);
 
+        private const string ROUTES_FILE_NAME = "prerenderable-routes.json";
+        private string RoutesFilePath => Path.Combine(AppContext.BaseDirectory, ROUTES_FILE_NAME);
+
         public NavigationPredictorService(ILogger<NavigationPredictorService> logger)
         {
             uint nextId = 0;
             var pageToId = new Dictionary<string, uint>();
+
+            _logger = logger;
+            LoadAllPossiblePageUrls();
+
 
             uint GetPageId(string page)
             {
@@ -29,10 +38,8 @@ namespace BlazorServerApp_Server.Services
                 return pageToId[page];
             }
 
-
             var idToPage = pageToId.ToDictionary(kv => kv.Value, kv => kv.Key);
 
-            _logger = logger;
             _mlContext = new MLContext(); // Initialize ML.NET context
 
             // Attempt to load existing model, otherwise train a new one
@@ -49,6 +56,50 @@ namespace BlazorServerApp_Server.Services
                 TrainModel(testData);
                 SaveModel(); // Save the newly trained model
             }
+        }
+        private void LoadAllPossiblePageUrls()
+        {
+            if (File.Exists(RoutesFilePath))
+            {
+                try
+                {
+                    var jsonString = File.ReadAllText(RoutesFilePath);
+
+                    // NEW: Deserialize into the PrerenderableRoutesConfig class
+                    var config = JsonSerializer.Deserialize<PrerenderableRoutesConfig>(jsonString,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Optional: for flexibility in JSON key casing
+
+                    if (config?.PrerendableRoutes != null) // Check if config and its list are not null
+                    {
+                        // Extract the list from the deserialized object
+                        _allPossiblePageUrls = config.PrerendableRoutes
+                            .Distinct()
+                            .OrderBy(url => url)
+                            .ToList();
+
+                        _logger.LogInformation($"Loaded {_allPossiblePageUrls.Count} pre-renderable routes from {ROUTES_FILE_NAME}.");
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error loading pre-renderable routes from {ROUTES_FILE_NAME}.");
+                }
+            }
+            else
+            {
+                _logger.LogWarning($"Pre-renderable routes file not found at {RoutesFilePath}. Falling back to dynamic detection from test data (less ideal).");
+            }
+
+
+            // Fallback: If JSON not found or failed, derive from test data as before.
+
+            //var tempTestData = LoadTestData(); // Pass true to skip setting _allPossiblePageUrls again
+            //_allPossiblePageUrls = tempTestData.Select(e => e.NextPageUrl)
+            //    .Distinct()
+            //    .OrderBy(url => url)
+            //    .ToList();
+            //_logger.LogInformation($"Falling back to {_allPossiblePageUrls.Count} routes derived from test data.");
         }
 
         // --- Data Collection (Simulation) ---
@@ -70,17 +121,22 @@ namespace BlazorServerApp_Server.Services
                 new AdvancedNavigationLogEntry
                 {
                     PreviousPage1Url = "/heavy-report", PreviousPage2Url = "/weather", PreviousPage3Url = "/",
-                    TimeOfDayInHours = 17.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/contact"
+                    TimeOfDayInHours = 17.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/product/{id}"
                 },
                 new AdvancedNavigationLogEntry
                 {
-                    PreviousPage1Url = "/contact", PreviousPage2Url = "/heavy-report", PreviousPage3Url = "/weather",
+                    PreviousPage1Url = "/product/{id}", PreviousPage2Url = "/heavy-report", PreviousPage3Url = "/weather",
                     TimeOfDayInHours = 17.1f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/"
                 },
                 new AdvancedNavigationLogEntry
                 {
-                    PreviousPage1Url = "/", PreviousPage2Url = "/contact", PreviousPage3Url = "/heavy-report",
+                    PreviousPage1Url = "/", PreviousPage2Url = "/product/{id}", PreviousPage3Url = "/heavy-report",
                     TimeOfDayInHours = 17.2f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/weather"
+                },
+                new AdvancedNavigationLogEntry
+                {
+                    PreviousPage1Url = "/", PreviousPage2Url = "/product/{id}", PreviousPage3Url = "/heavy-report",
+                    TimeOfDayInHours = 17.2f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/product"
                 },
 
                 // User2 (Mobile) - Home -> Counter -> Home (often morning/lunch)
@@ -97,7 +153,7 @@ namespace BlazorServerApp_Server.Services
                 new AdvancedNavigationLogEntry
                 {
                     PreviousPage1Url = "/weather", PreviousPage2Url = "/", PreviousPage3Url = "/counter",
-                    TimeOfDayInHours = 12.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/contact"
+                    TimeOfDayInHours = 12.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather"
                 },
 
                 // User3 (Tablet) - Quick check of Weather2 (morning)
@@ -115,29 +171,23 @@ namespace BlazorServerApp_Server.Services
                 // More data for variety
                 new AdvancedNavigationLogEntry
                 {
-                    PreviousPage1Url = "/contact", PreviousPage2Url = "/", PreviousPage3Url = "/weather",
+                    PreviousPage1Url = "/weather-prerendered", PreviousPage2Url = "/", PreviousPage3Url = "/weather",
                     TimeOfDayInHours = 10.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/weather2"
                 },
                 new AdvancedNavigationLogEntry
                 {
                     PreviousPage1Url = "/weather", PreviousPage2Url = "/heavy-report", PreviousPage3Url = "/",
-                    TimeOfDayInHours = 20.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/contact"
+                    TimeOfDayInHours = 20.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather2"
                 },
                 new AdvancedNavigationLogEntry
                 {
-                    PreviousPage1Url = "/heavy-report", PreviousPage2Url = "/weather", PreviousPage3Url = "/contact",
+                    PreviousPage1Url = "/heavy-report", PreviousPage2Url = "/weather", PreviousPage3Url = "/weather",
                     TimeOfDayInHours = 21.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/"
                 },
             };
 
-            // Collect all unique possible target URLs (labels) for ML.NET to map them
-            // Ensure this collection is consistent. In a real app, this would be all possible app routes.
-            _allPossiblePageUrls = rawData.Select(e => e.NextPageUrl)
-                .Distinct()
-                .OrderBy(url => url) // Consistent order for mapping
-                .ToList();
-
-            _logger.LogInformation(
+     
+        _logger.LogInformation(
                 $"Loaded {rawData.Count} advanced test entries. Known pages for prediction: {string.Join(", ", _allPossiblePageUrls)}");
             return rawData;
         }

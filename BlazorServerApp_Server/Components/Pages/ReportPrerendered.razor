@@ -18,7 +18,7 @@ else
 {
     @* If no cached HTML, render the "live" version of the component directly *@
     Logger.LogWarning($"HeavyReport: Cache miss for HeavyReport. Rendering live version.");
-    <p><em>Prerendered content not available. Loading live data...</em></p>
+    @* <p><em>Prerendered content not available. Loading live data...</em></p> *@
 
     @* IMPORTANT: Directly render the HeavyReportLive component here.
        It will then execute its own OnInitializedAsync and fetch data. *@

@@ -1,4 +1,8 @@
-﻿using BlazorServerApp_Server.Services;
+﻿using System.CodeDom;
+using BlazorServerApp_Server.Components.Pages;
+using BlazorServerApp_Server.Components.Pages.Product;
+using BlazorServerApp_Server.Data.Model;
+using BlazorServerApp_Server.Services;
 using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
 
 namespace BlazorServerApp_Server
@@ -35,7 +39,6 @@ namespace BlazorServerApp_Server
         {
             { "", new[] { "/weather" } },
             //{ "weather-prerendered", new[] { "/weather2" } },
-            { "/contact", new[] { "/weather2" } },
             { "weather-prerendered", new[] { "/heavy-report" } }
         };
 
@@ -124,8 +127,9 @@ namespace BlazorServerApp_Server
             if (normalizedUrl == "") return typeof(Components.Pages.Home);
             if (normalizedUrl.Equals("/weather", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather);
             if (normalizedUrl.Equals("/weather2", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather2);
-            if (normalizedUrl.Equals("/contact", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather2); 
+            //if (normalizedUrl.Equals("/contact", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather2); 
             if (normalizedUrl.Equals("/heavy-report", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.ReportPrerendered); 
+            if (normalizedUrl.Contains("/product", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Product.ProductDetails); 
 
             return null; 
         }
