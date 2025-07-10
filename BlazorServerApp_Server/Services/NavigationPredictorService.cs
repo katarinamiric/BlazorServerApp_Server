@@ -1,6 +1,8 @@
 ﻿using BlazorServerApp_Server.Data;
 using Microsoft.ML;
 using System.Text.Json;
+using Microsoft.ML.Data;
+using BlazorServerApp_Server.Redis;
 
 namespace BlazorServerApp_Server.Services
 {
@@ -10,7 +12,9 @@ namespace BlazorServerApp_Server.Services
         private readonly MLContext _mlContext;
         private ITransformer? _trainedModel;
         private PredictionEngine<AdvancedNavigationLogEntry, NavigationPredictionOutput>? _predictionEngine;
-        private List<string> _allPossiblePageUrls = new List<string>();
+        // Store known page URLs from the training data for prediction input validation/suggestion
+        private HashSet<string> _allPossiblePageUrls = new HashSet<string>();
+        private readonly RedisPageHistoryService _redisPageHistoryService;
 
         private const string MODEL_FILE_NAME = "navigation_prediction_model.zip";
         private string ModelPath => Path.Combine(AppContext.BaseDirectory, MODEL_FILE_NAME);
@@ -18,40 +22,49 @@ namespace BlazorServerApp_Server.Services
         private const string ROUTES_FILE_NAME = "prerenderable-routes.json";
         private string RoutesFilePath => Path.Combine(AppContext.BaseDirectory, ROUTES_FILE_NAME);
 
-        public NavigationPredictorService(ILogger<NavigationPredictorService> logger)
+        public NavigationPredictorService(
+            ILogger<NavigationPredictorService> logger,
+            RedisPageHistoryService redisPageHistoryService) // Inject the service that gets DB data
         {
-            uint nextId = 0;
-            var pageToId = new Dictionary<string, uint>();
-
+            _mlContext = new MLContext(seed: 0); // Seed for reproducibility
             _logger = logger;
-            LoadAllPossiblePageUrls();
-
-
-            uint GetPageId(string page)
-            {
-                if (!pageToId.ContainsKey(page))
-                    pageToId[page] = nextId++;
-                return pageToId[page];
-            }
-
-            var idToPage = pageToId.ToDictionary(kv => kv.Value, kv => kv.Key);
-
-            _mlContext = new MLContext();
-
-            if (File.Exists(ModelPath))
-            {
-                _logger.LogInformation("NavigationPredictorService: Loading existing ML.NET model...");
-                LoadModel();
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "NavigationPredictorService: No existing model found. Training a new model with test data...");
-                var testData = LoadTestData();
-                TrainModel(testData);
-                SaveModel();
-            }
+            _redisPageHistoryService = redisPageHistoryService; // Assign
         }
+
+
+        // This method will be called periodically by the timer
+        public async Task TrainModelPeriodicallyAsync()
+        {
+            _logger.LogInformation("NavigationPredictorService: Starting periodic model training...");
+
+            // Fetch training data from the database via RedisPageHistoryService
+            List<AdvancedNavigationLogEntry> trainingData = await _redisPageHistoryService.GetAllAdvancedNavigationLogEntriesAsync();
+
+            if (trainingData == null || !trainingData.Any())
+            {
+                _logger.LogWarning("NavigationPredictorService: No training data available from database. Skipping model training.");
+                // IMPORTANT: If no data is available, _trainedModel and _predictionEngine will remain null
+                // or use the last successfully trained model. Consider a fallback or initial dummy data.
+                return;
+            }
+
+            // Populate _allPossiblePageUrls from the training data
+            _allPossiblePageUrls.Clear();
+            foreach (var entry in trainingData)
+            {
+                _allPossiblePageUrls.Add(entry.PreviousPage1Url);
+                _allPossiblePageUrls.Add(entry.PreviousPage2Url);
+                _allPossiblePageUrls.Add(entry.PreviousPage3Url);
+                _allPossiblePageUrls.Add(entry.NextPageUrl);
+            }
+            _allPossiblePageUrls.Remove(""); // Remove empty string if present
+
+            _logger.LogInformation(
+                $"Loaded {trainingData.Count} advanced training entries from DB. Known pages for prediction: {string.Join(", ", _allPossiblePageUrls)}");
+
+            TrainModel(trainingData); // Call the actual training logic
+        }
+
         private void LoadAllPossiblePageUrls()
         {
             if (File.Exists(RoutesFilePath))
@@ -63,14 +76,15 @@ namespace BlazorServerApp_Server.Services
                     var config = JsonSerializer.Deserialize<PrerenderableRoutesConfig>(jsonString,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                    if (config?.PrerendableRoutes != null) 
+                    if (config?.PrerendableRoutes != null)
                     {
                         _allPossiblePageUrls = config.PrerendableRoutes
                             .Distinct()
                             .OrderBy(url => url)
-                            .ToList();
+                            .ToHashSet();
 
-                        _logger.LogInformation($"Loaded {_allPossiblePageUrls.Count} pre-renderable routes from {ROUTES_FILE_NAME}.");
+                        _logger.LogInformation(
+                            $"Loaded {_allPossiblePageUrls.Count} pre-renderable routes from {ROUTES_FILE_NAME}.");
                         return;
                     }
                 }
@@ -81,7 +95,8 @@ namespace BlazorServerApp_Server.Services
             }
             else
             {
-                _logger.LogWarning($"Pre-renderable routes file not found at {RoutesFilePath}. Falling back to dynamic detection from test data (less ideal).");
+                _logger.LogWarning(
+                    $"Pre-renderable routes file not found at {RoutesFilePath}. Falling back to dynamic detection from test data (less ideal).");
             }
 
 
@@ -95,94 +110,95 @@ namespace BlazorServerApp_Server.Services
             //_logger.LogInformation($"Falling back to {_allPossiblePageUrls.Count} routes derived from test data.");
         }
 
-        private List<AdvancedNavigationLogEntry> LoadTestData()
-        {
-            var rawData = new List<AdvancedNavigationLogEntry>
-            {
-                // User1 (Desktop) - Home -> Weather -> Heavy Report (often afternoon/evening)
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/weather", PreviousPage2Url = "/", PreviousPage3Url = "",
-                    TimeOfDayInHours = 15.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/heavy-report"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/weather", PreviousPage2Url = "/", PreviousPage3Url = "",
-                    TimeOfDayInHours = 16.5f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/heavy-report"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/heavy-report", PreviousPage2Url = "/weather", PreviousPage3Url = "/",
-                    TimeOfDayInHours = 17.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/product/{id}"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/product/{id}", PreviousPage2Url = "/heavy-report", PreviousPage3Url = "/weather",
-                    TimeOfDayInHours = 17.1f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/", PreviousPage2Url = "/product/{id}", PreviousPage3Url = "/heavy-report",
-                    TimeOfDayInHours = 17.2f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/weather"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/", PreviousPage2Url = "/product/{id}", PreviousPage3Url = "/heavy-report",
-                    TimeOfDayInHours = 17.2f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/product"
-                },
+        //private List<AdvancedNavigationLogEntry> LoadTestData()
+        //{
+        //    var rawData = new List<AdvancedNavigationLogEntry>
+        //    {
+        //        // User1 (Desktop) - Home -> Weather -> Heavy Report (often afternoon/evening)
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/weather", PreviousPage2Url = "/", PreviousPage3Url = "",
+        //            TimeOfDayInHours = 15.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/heavy-report"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/weather", PreviousPage2Url = "/", PreviousPage3Url = "",
+        //            TimeOfDayInHours = 16.5f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/heavy-report"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/heavy-report", PreviousPage2Url = "/weather", PreviousPage3Url = "/",
+        //            TimeOfDayInHours = 17.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/product/{id}"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/product/{id}", PreviousPage2Url = "/heavy-report",
+        //            PreviousPage3Url = "/weather",
+        //            TimeOfDayInHours = 17.1f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/", PreviousPage2Url = "/product/{id}", PreviousPage3Url = "/heavy-report",
+        //            TimeOfDayInHours = 17.2f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/weather"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/", PreviousPage2Url = "/product/{id}", PreviousPage3Url = "/heavy-report",
+        //            TimeOfDayInHours = 17.2f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/product"
+        //        },
 
-                // User2 (Mobile) - Home -> Counter -> Home (often morning/lunch)
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/counter", PreviousPage2Url = "/", PreviousPage3Url = "",
-                    TimeOfDayInHours = 9.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/", PreviousPage2Url = "/counter", PreviousPage3Url = "",
-                    TimeOfDayInHours = 9.1f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/weather", PreviousPage2Url = "/", PreviousPage3Url = "/counter",
-                    TimeOfDayInHours = 12.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather"
-                },
+        //        // User2 (Mobile) - Home -> Counter -> Home (often morning/lunch)
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/counter", PreviousPage2Url = "/", PreviousPage3Url = "",
+        //            TimeOfDayInHours = 9.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/", PreviousPage2Url = "/counter", PreviousPage3Url = "",
+        //            TimeOfDayInHours = 9.1f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/weather", PreviousPage2Url = "/", PreviousPage3Url = "/counter",
+        //            TimeOfDayInHours = 12.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather"
+        //        },
 
-                // User3 (Tablet) - Quick check of Weather2 (morning)
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/weather2", PreviousPage2Url = "/", PreviousPage3Url = "",
-                    TimeOfDayInHours = 8.3f, UserId = "user3", DeviceType = "Tablet", NextPageUrl = "/weather"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/", PreviousPage2Url = "/weather2", PreviousPage3Url = "",
-                    TimeOfDayInHours = 8.4f, UserId = "user3", DeviceType = "Tablet", NextPageUrl = "/heavy-report"
-                },
+        //        // User3 (Tablet) - Quick check of Weather2 (morning)
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/weather2", PreviousPage2Url = "/", PreviousPage3Url = "",
+        //            TimeOfDayInHours = 8.3f, UserId = "user3", DeviceType = "Tablet", NextPageUrl = "/weather"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/", PreviousPage2Url = "/weather2", PreviousPage3Url = "",
+        //            TimeOfDayInHours = 8.4f, UserId = "user3", DeviceType = "Tablet", NextPageUrl = "/heavy-report"
+        //        },
 
-                // More data for variety
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/weather-prerendered", PreviousPage2Url = "/", PreviousPage3Url = "/weather",
-                    TimeOfDayInHours = 10.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/weather2"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/weather", PreviousPage2Url = "/heavy-report", PreviousPage3Url = "/",
-                    TimeOfDayInHours = 20.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather2"
-                },
-                new AdvancedNavigationLogEntry
-                {
-                    PreviousPage1Url = "/heavy-report", PreviousPage2Url = "/weather", PreviousPage3Url = "/weather",
-                    TimeOfDayInHours = 21.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/"
-                },
-            };
+        //        // More data for variety
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/weather-prerendered", PreviousPage2Url = "/", PreviousPage3Url = "/weather",
+        //            TimeOfDayInHours = 10.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/weather2"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/weather", PreviousPage2Url = "/heavy-report", PreviousPage3Url = "/",
+        //            TimeOfDayInHours = 20.0f, UserId = "user2", DeviceType = "Mobile", NextPageUrl = "/weather2"
+        //        },
+        //        new AdvancedNavigationLogEntry
+        //        {
+        //            PreviousPage1Url = "/heavy-report", PreviousPage2Url = "/weather", PreviousPage3Url = "/weather",
+        //            TimeOfDayInHours = 21.0f, UserId = "user1", DeviceType = "Desktop", NextPageUrl = "/"
+        //        },
+        //    };
 
-     
-        _logger.LogInformation(
-                $"Loaded {rawData.Count} advanced test entries. Known pages for prediction: {string.Join(", ", _allPossiblePageUrls)}");
-            return rawData;
-        }
+
+        //    _logger.LogInformation(
+        //        $"Loaded {rawData.Count} advanced test entries. Known pages for prediction: {string.Join(", ", _allPossiblePageUrls)}");
+        //    return rawData;
+        //}
 
         private void TrainModel(List<AdvancedNavigationLogEntry> trainingData)
         {
@@ -217,7 +233,6 @@ namespace BlazorServerApp_Server.Services
                     "UserIdEncoded",
                     "DeviceTypeEncoded",
                     "TimeOfDayInHours")) // Numerical feature directly included
-
                 .AppendCacheCheckpoint(_mlContext) // Cache data for faster training
 
                 // Choose your multi-class classification trainer
@@ -225,7 +240,6 @@ namespace BlazorServerApp_Server.Services
                 .Append(_mlContext.MulticlassClassification.Trainers.LightGbm("Label", "Features"))
                 // Or FastTree if preferred:
                 // .Append(_mlContext.MulticlassClassification.Trainers.FastTreeOva("Label", "Features")) // OVA (One-vs-All) for multi-class
-
                 .Append(_mlContext.Transforms.Conversion
                     .MapKeyToValue("PredictedLabel")); // Map numeric prediction back to original string label
 
@@ -241,90 +255,93 @@ namespace BlazorServerApp_Server.Services
         }
 
 
-        private void SaveModel()
-        {
-            if (_trainedModel == null) return;
+        //private void SaveModel()
+        //{
+        //    if (_trainedModel == null) return;
 
-            _logger.LogInformation($"NavigationPredictorService: Saving model to {ModelPath}");
+        //    _logger.LogInformation($"NavigationPredictorService: Saving model to {ModelPath}");
 
-            var trainingData = LoadTestData(); // cuvamo set koji smo koristili za treniranje
-            IDataView dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
+        //    var trainingData = LoadTestData(); // cuvamo set koji smo koristili za treniranje
+        //    IDataView dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
 
-            // Save the model along with the input schema
-            _mlContext.Model.Save(_trainedModel, dataView.Schema, ModelPath);
-        }
+        //    // Save the model along with the input schema
+        //    _mlContext.Model.Save(_trainedModel, dataView.Schema, ModelPath);
+        //}
 
-        private void LoadModel()
-        {
-            if (!File.Exists(ModelPath)) return;
-            _logger.LogInformation($"NavigationPredictorService: Loading model from {ModelPath}");
-            ITransformer loadedModel = _mlContext.Model.Load(ModelPath, out DataViewSchema modelSchema);
+        //private void LoadModel()
+        //{
+        //    if (!File.Exists(ModelPath)) return;
+        //    _logger.LogInformation($"NavigationPredictorService: Loading model from {ModelPath}");
+        //    ITransformer loadedModel = _mlContext.Model.Load(ModelPath, out DataViewSchema modelSchema);
 
-            LoadTestData();
+        //    LoadTestData();
 
-            _trainedModel = loadedModel;
-            _predictionEngine =
-                _mlContext.Model.CreatePredictionEngine<AdvancedNavigationLogEntry, NavigationPredictionOutput>(
-                    _trainedModel);
-            _logger.LogInformation("NavigationPredictorService: Model loaded successfully.");
-        }
+        //    _trainedModel = loadedModel;
+        //    _predictionEngine =
+        //        _mlContext.Model.CreatePredictionEngine<AdvancedNavigationLogEntry, NavigationPredictionOutput>(
+        //            _trainedModel);
+        //    _logger.LogInformation("NavigationPredictorService: Model loaded successfully.");
+        //}
 
         /// <summary>
         /// Predicts the most likely next pages based on the trained ML.NET model,
         /// considering last 3 pages, time of day, user ID, and device type.
         /// </summary>
-        public IEnumerable<string> PredictNextPages(
-            string currentPageUrl, // This is PreviousPage1Url in the model
-            string previousPage2Url,
-            string previousPage3Url,
-            float timeOfDayInHours,
-            string userId,
-            string deviceType,
-            int maxPredictions = 3)
+        public List<string> PredictNextPage(string previousPage1, string previousPage2, string previousPage3, string userId, string deviceType, int maxPredictions = 3)
         {
-            if (_predictionEngine == null || _allPossiblePageUrls == null || !_allPossiblePageUrls.Any())
+            if (_predictionEngine == null)
             {
-                _logger.LogWarning("Prediction engine or label mapping not initialized. Cannot make predictions.");
-                return Enumerable.Empty<string>();
+                _logger.LogWarning("NavigationPredictorService: Model not trained yet. Cannot make prediction.");
+                return new List<string>(); // Return empty list
             }
+
+            // Time of day at the moment of prediction
+            float timeOfDay = (float)DateTime.UtcNow.TimeOfDay.TotalHours;
 
             var input = new AdvancedNavigationLogEntry
             {
-                PreviousPage1Url = currentPageUrl,
-                PreviousPage2Url = previousPage2Url,
-                PreviousPage3Url = previousPage3Url,
-                TimeOfDayInHours = timeOfDayInHours,
+                PreviousPage1Url = previousPage1,
+                PreviousPage2Url = previousPage2,
+                PreviousPage3Url = previousPage3,
                 UserId = userId,
-                DeviceType = deviceType
+                DeviceType = deviceType,
+                TimeOfDayInHours = timeOfDay
             };
 
-            NavigationPredictionOutput prediction = _predictionEngine.Predict(input);
+            var prediction = _predictionEngine.Predict(input);
 
+            // Get the slot names (original labels/URLs) corresponding to the scores
+            VBuffer<ReadOnlyMemory<char>> slotNames = default;
+            _predictionEngine.OutputSchema["Score"].GetSlotNames(ref slotNames);
+            var pageUrls = slotNames.GetValues().ToArray() // Use .GetValues() for ReadOnlyMemory<char>
+                .Select(charMem => charMem.ToString())
+                .ToArray();
+
+            // Combine scores with their corresponding page URLs
             var scoresWithUrls = new List<(string Url, float Score)>();
             for (int i = 0; i < prediction.Scores.Length; i++)
             {
-                if (i < _allPossiblePageUrls.Count)
+                if (i < pageUrls.Length)
                 {
-                    scoresWithUrls.Add((_allPossiblePageUrls[i], prediction.Scores[i]));
+                    scoresWithUrls.Add((pageUrls[i], prediction.Scores[i]));
                 }
                 else
                 {
-                    _logger.LogWarning(
-                        $"Score index {i} out of bounds for known URLs. This might indicate a mismatch between training labels and prediction output.");
+                    _logger.LogWarning($"Score index {i} out of bounds for known page URLs. This might indicate a mismatch in label mapping.");
                 }
             }
 
+            // Order by score descending and take the top N
             var topPredictions = scoresWithUrls
                 .OrderByDescending(x => x.Score)
                 .Take(maxPredictions)
                 .Select(x => x.Url)
                 .ToList();
 
-            _logger.LogInformation(
-                $"ML.NET Prediction for P1:'{currentPageUrl}', P2:'{previousPage2Url}', P3:'{previousPage3Url}', Time:{timeOfDayInHours}, User:{userId}, Device:{deviceType}: {string.Join(", ", topPredictions)}");
+            _logger.LogInformation($"Prediction for User: {userId}, Device: {deviceType}, History: {previousPage3} -> {previousPage2} -> {previousPage1} -> Top {maxPredictions} Predicted: {string.Join(", ", topPredictions)}");
+
             return topPredictions;
         }
-
         //Summary
         //To retrain the model in the future
         public void RecordNavigation(

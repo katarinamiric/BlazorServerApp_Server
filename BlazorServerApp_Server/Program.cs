@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using StackExchange.Redis;
+using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,11 +28,13 @@ builder.Services.AddScoped<HtmlRenderer>();
 //builder.Services.AddScoped<WeatherPrerenderService>();
 builder.Services.AddHostedService<PrerenderService>();
 builder.Services.AddSingleton<NavigationTracker>();
-builder.Services.AddSingleton<NavigationRuleEngine>();
+builder.Services.AddScoped<NavigationRuleEngine>();
 builder.Services.AddSingleton<NavigationPredictorService>();
 builder.Services.AddScoped<BrowserHistoryService>();
 builder.Services.AddScoped<ProductService>();
+builder.Services.AddScoped<DataSeeder>();
 builder.Services.AddHttpContextAccessor();
+
 // Program.cs
 builder.Services.AddSingleton<RedisPageHistoryService>();
 
@@ -42,9 +45,22 @@ builder.Services.AddHostedService<SqlServiceBrokerListener>();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<PrerenderRegistry>();
 builder.Services.AddScoped<ReportDataService>();
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+//var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+//builder.Services.AddDbContext<ApplicationDbContext>(options =>
+//    options.UseSqlServer(connectionString));
+
+//builder.Services.AddDbContext<ApplicationDbContext>(options =>
+//{
+//    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+//});
+
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+});
+
+builder.Services.AddHostedService<ModelTrainingBackgroundService>();
+
 
 // --- Configure Redis ---
 // Get Redis connection string from appsettings.json
@@ -73,11 +89,13 @@ if (app.Environment.IsDevelopment())
     using (var scope = app.Services.CreateScope())
     {
         var services = scope.ServiceProvider;
+        var dataSeeder = scope.ServiceProvider.GetRequiredService<DataSeeder>(); // Get the DataSeeder
         try
         {
             var context = services.GetRequiredService<ApplicationDbContext>();
             context.Database.Migrate(); 
-            await SeedData(context); 
+            await SeedData(context);
+            await dataSeeder.SeedInitialTrainingDataAsync();
         }
         catch (Exception ex)
         {

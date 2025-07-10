@@ -1,4 +1,5 @@
 ﻿using BlazorServerApp_Server.Data.Model;
+using BlazorServerApp_Server.Services;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,7 @@ namespace BlazorServerApp_Server.Data
         public DbSet<Weather> Weather { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<ProductRelatedProduct> ProductRelatedProducts { get; set; }
+        public DbSet<AdvancedNavigationLogEntry> AdvancedNavigationLogEntries { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
