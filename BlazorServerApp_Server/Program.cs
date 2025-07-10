@@ -5,11 +5,13 @@ using BlazorServerApp_Server.Data;
 using BlazorServerApp_Server.Data.Model;
 using BlazorServerApp_Server.Hubs.BlazorServerApp_Server.Hubs;
 using BlazorServerApp_Server.Middleware;
+using BlazorServerApp_Server.Redis;
 using BlazorServerApp_Server.Services;
 using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +19,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddSingleton<HtmlCache>();
+
+builder.Services.AddSingleton<RedisHtmlCache>();
+builder.Services.AddSingleton<RedisPrerenderRegistry>();
+
 builder.Services.AddScoped<HtmlRenderer>();
 //builder.Services.AddScoped<WeatherPrerenderService>();
 builder.Services.AddHostedService<PrerenderService>();
@@ -25,12 +31,12 @@ builder.Services.AddSingleton<NavigationRuleEngine>();
 builder.Services.AddSingleton<NavigationPredictorService>();
 builder.Services.AddScoped<BrowserHistoryService>();
 builder.Services.AddScoped<ProductService>();
-builder.Services.AddHttpContextAccessor(); // <-- ADD THIS LINE
+builder.Services.AddHttpContextAccessor();
 // Program.cs
 builder.Services.AddSingleton<InMemoryPageHistoryService>();
 
 builder.Services.AddScoped<BackgroundPagePrerenderer>();
-builder.Services.AddSingleton<WeatherPrerenderDataService>(); // If WeatherForecastService is used for fetching data
+builder.Services.AddSingleton<WeatherPrerenderDataService>(); 
 builder.Services.AddMemoryCache();
 builder.Services.AddHostedService<SqlServiceBrokerListener>();
 builder.Services.AddSignalR();
@@ -40,6 +46,22 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 
+// --- Configure Redis ---
+// Get Redis connection string from appsettings.json
+var redisConnectionString = builder.Configuration.GetConnectionString("RedisConnection");
+if (string.IsNullOrEmpty(redisConnectionString))
+{
+    Console.WriteLine("Warning: RedisConnection string is not configured in appsettings.json. Redis cache will not be used.");
+    // Fallback to in-memory if Redis not configured, or throw error based on preference.
+    // For this example, we'll proceed assuming it's configured.
+}
+
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    // Configure your Redis connection here
+    // Example: "localhost:6379" or "yourredis.azure.com:6380,password=YOUR_PASSWORD,ssl=True,abortConnect=False"
+    return ConnectionMultiplexer.Connect(redisConnectionString ?? "localhost:6379");
+});
 
 var app = builder.Build();
 
@@ -54,8 +76,8 @@ if (app.Environment.IsDevelopment())
         try
         {
             var context = services.GetRequiredService<ApplicationDbContext>();
-            context.Database.Migrate(); // Apply any pending migrations
-            await SeedData(context); // Call your seeding method
+            context.Database.Migrate(); 
+            await SeedData(context); 
         }
         catch (Exception ex)
         {
@@ -70,7 +92,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseNavigationHistory(); // <-- ADD THIS LINE
+app.UseNavigationHistory(); 
 
 app.UseAntiforgery();
 app.MapHub<WeatherHub>("/weatherhub");

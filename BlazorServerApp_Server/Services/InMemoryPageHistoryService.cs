@@ -1,10 +1,9 @@
-﻿using System.Collections.Concurrent; // For thread-safe dictionary
+﻿using System.Collections.Concurrent;
 
 namespace BlazorServerApp_Server.Services
 {
     public class InMemoryPageHistoryService
     {
-        // Stores history per user/connection. Key: UserId, Value: List of page URLs
         private readonly ConcurrentDictionary<string, List<string>> _userHistories = new ConcurrentDictionary<string, List<string>>();
         private readonly ILogger<InMemoryPageHistoryService> _logger;
         private const int MaxHistorySize = 3;
@@ -17,7 +16,7 @@ namespace BlazorServerApp_Server.Services
         /// <summary>
         /// Records a page visit in memory for a specific user.
         /// </summary>
-        public Task AddPageVisitAsync(string userId, string pageUrl, string deviceType) // DeviceType can be ignored for simple in-memory
+        public Task AddPageVisitAsync(string userId, string pageUrl, string deviceType)
         {
             if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(pageUrl))
             {
@@ -25,18 +24,16 @@ namespace BlazorServerApp_Server.Services
                 return Task.CompletedTask;
             }
 
-            // Get or create the user's history list
             var history = _userHistories.GetOrAdd(userId, _ => new List<string>());
 
-            // Ensure thread-safe modification of the list
             lock (history)
             {
                 // Remove the oldest entry if history is full
                 if (history.Count >= MaxHistorySize)
                 {
-                    history.RemoveAt(0); // Remove the oldest page
+                    history.RemoveAt(0);
                 }
-                history.Add(pageUrl); // Add the new page as the most recent
+                history.Add(pageUrl);
             }
 
             _logger.LogInformation($"InMemoryPageHistoryService: Recorded page visit: User={userId}, Page={pageUrl}. Current for user: {string.Join(" -> ", history)}");
@@ -52,18 +49,15 @@ namespace BlazorServerApp_Server.Services
         {
             if (string.IsNullOrEmpty(userId) || !_userHistories.TryGetValue(userId, out var history))
             {
-                // If user not found or history is empty, return an array of empty strings
                 _logger.LogInformation($"InMemoryPageHistoryService: No history found for User={userId}. Returning empty pages.");
                 return Task.FromResult(new string[MaxHistorySize] { "", "", "" });
             }
 
             string[] result;
-            lock (history) // Ensure thread-safe access
+            lock (history)
             {
-                // Get the last N elements
                 var relevantHistory = history.TakeLast(MaxHistorySize).ToList();
 
-                // Pad with empty strings if there aren't enough entries
                 result = new string[MaxHistorySize];
                 for (int i = 0; i < MaxHistorySize; i++)
                 {

@@ -1,15 +1,9 @@
-﻿using BlazorServerApp_Server.Hubs;
+﻿using BlazorServerApp_Server.Hubs.BlazorServerApp_Server.Hubs;
+using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.DependencyInjection; 
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml.Linq;
-using BlazorServerApp_Server.Hubs.BlazorServerApp_Server.Hubs;
-using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
+using BlazorServerApp_Server.Redis;
 
 namespace BlazorServerApp_Server.Services
 {
@@ -44,7 +38,7 @@ namespace BlazorServerApp_Server.Services
                 {
 
                     var prerenderer = scope.ServiceProvider.GetRequiredService<BackgroundPagePrerenderer>();
-                    var prerenderRegistry = scope.ServiceProvider.GetRequiredService<PrerenderRegistry>();
+                    var prerenderRegistry = scope.ServiceProvider.GetRequiredService<RedisPrerenderRegistry>();
 
                     try
                     {
@@ -82,7 +76,7 @@ namespace BlazorServerApp_Server.Services
 
                                             if (affectedComponentType != null)
                                             {
-                                                if (prerenderRegistry.IsPageActivelyPrerendered(affectedComponentType)) 
+                                                if (await prerenderRegistry.IsPageActivelyPrerenderedAsync(affectedComponentType)) 
                                                 {
                                                     _logger.LogInformation($"DB change detected for {changedTableName}. Page {affectedComponentType.Name} is actively prerendered. Re-prerendering...");
                                                     var prerenderMethod = typeof(BackgroundPagePrerenderer)

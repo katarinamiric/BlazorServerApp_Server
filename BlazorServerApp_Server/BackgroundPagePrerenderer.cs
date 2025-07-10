@@ -48,7 +48,8 @@
 //}
 
 
-using BlazorServerApp_Server.Components.Pages; // Assuming your Weather and Counter components are here
+using BlazorServerApp_Server.Components.Pages;
+using BlazorServerApp_Server.Redis; // Assuming your Weather and Counter components are here
 using BlazorServerApp_Server.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -60,11 +61,11 @@ namespace BlazorServerApp_Server
         private readonly HtmlRenderer _renderer;
         private readonly IServiceProvider _services;
         private readonly ILogger<BackgroundPagePrerenderer> _logger;
-        private readonly HtmlCache _cache;
+        private readonly RedisHtmlCache _cache;
 
         private readonly Dictionary<Type, Func<IServiceProvider, Task<object?>>> _prerenderDataFetchers;
 
-        public BackgroundPagePrerenderer(HtmlRenderer renderer, IServiceProvider services, ILogger<BackgroundPagePrerenderer> logger, HtmlCache cache)
+        public BackgroundPagePrerenderer(HtmlRenderer renderer, IServiceProvider services, ILogger<BackgroundPagePrerenderer> logger, RedisHtmlCache cache)
         {
             _renderer = renderer;
             _services = services;
@@ -135,9 +136,8 @@ namespace BlazorServerApp_Server
                 _logger.LogInformation($"[Prerender] {pageName} HTML: {html?.Length ?? 0} characters. Data fetched: {pageData != null}.");
                 if (pageData != null)
                 {
-                    _cache.Set($"{pageName}_Data", pageData); 
+                    await _cache.SetDataAsync($"{pageName}", pageData); 
                 }
-                
               
                 html = await _renderer.Dispatcher.InvokeAsync(async () =>
                 {
@@ -147,10 +147,7 @@ namespace BlazorServerApp_Server
                     return writer.ToString();
                 });
 
-                if (html != null)
-                {
-                    _cache.Set(pageName, html);
-                }
+                await _cache.SetHtmlAsync(pageName, html);
                 Console.WriteLine($"✅ {pageName} was prerendered and cached.");
             }
             catch (Exception ex)

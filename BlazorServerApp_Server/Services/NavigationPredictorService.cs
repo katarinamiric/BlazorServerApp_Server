@@ -4,18 +4,14 @@ using System.Text.Json;
 
 namespace BlazorServerApp_Server.Services
 {
-    // Make sure NavigationLogEntry, NavigationLogEntry, NavigationPredictionOutput are defined or included here
-    // as per the previous step.
-
     public class NavigationPredictorService
     {
         private readonly ILogger<NavigationPredictorService> _logger;
         private readonly MLContext _mlContext;
         private ITransformer? _trainedModel;
         private PredictionEngine<AdvancedNavigationLogEntry, NavigationPredictionOutput>? _predictionEngine;
-        private List<string> _allPossiblePageUrls = new List<string>(); // To map scores back to URLs
+        private List<string> _allPossiblePageUrls = new List<string>();
 
-        // --- Model File Path (Optional for persistence) ---
         private const string MODEL_FILE_NAME = "navigation_prediction_model.zip";
         private string ModelPath => Path.Combine(AppContext.BaseDirectory, MODEL_FILE_NAME);
 
@@ -40,9 +36,8 @@ namespace BlazorServerApp_Server.Services
 
             var idToPage = pageToId.ToDictionary(kv => kv.Value, kv => kv.Key);
 
-            _mlContext = new MLContext(); // Initialize ML.NET context
+            _mlContext = new MLContext();
 
-            // Attempt to load existing model, otherwise train a new one
             if (File.Exists(ModelPath))
             {
                 _logger.LogInformation("NavigationPredictorService: Loading existing ML.NET model...");
@@ -54,7 +49,7 @@ namespace BlazorServerApp_Server.Services
                     "NavigationPredictorService: No existing model found. Training a new model with test data...");
                 var testData = LoadTestData();
                 TrainModel(testData);
-                SaveModel(); // Save the newly trained model
+                SaveModel();
             }
         }
         private void LoadAllPossiblePageUrls()
@@ -65,13 +60,11 @@ namespace BlazorServerApp_Server.Services
                 {
                     var jsonString = File.ReadAllText(RoutesFilePath);
 
-                    // NEW: Deserialize into the PrerenderableRoutesConfig class
                     var config = JsonSerializer.Deserialize<PrerenderableRoutesConfig>(jsonString,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); // Optional: for flexibility in JSON key casing
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                    if (config?.PrerendableRoutes != null) // Check if config and its list are not null
+                    if (config?.PrerendableRoutes != null) 
                     {
-                        // Extract the list from the deserialized object
                         _allPossiblePageUrls = config.PrerendableRoutes
                             .Distinct()
                             .OrderBy(url => url)
@@ -102,7 +95,6 @@ namespace BlazorServerApp_Server.Services
             //_logger.LogInformation($"Falling back to {_allPossiblePageUrls.Count} routes derived from test data.");
         }
 
-        // --- Data Collection (Simulation) ---
         private List<AdvancedNavigationLogEntry> LoadTestData()
         {
             var rawData = new List<AdvancedNavigationLogEntry>
@@ -192,18 +184,13 @@ namespace BlazorServerApp_Server.Services
             return rawData;
         }
 
-        // --- ML.NET Model Training ---
-
         private void TrainModel(List<AdvancedNavigationLogEntry> trainingData)
         {
-            // Convert list to IDataView (ML.NET's data representation)
             IDataView dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
 
-            // Define the ML.NET training pipeline
             var pipeline = _mlContext.Transforms.Conversion
-                .MapValueToKey("Label", "Label") // Map NextPageUrl (Label) to numeric keys
+                .MapValueToKey("Label", "Label")
 
-                // Feature Engineering for Categorical Features (URLs, UserId, DeviceType)
                 // 1. Map string values to numeric keys
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("PreviousPage1UrlKey", "PreviousPage1Url"))
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("PreviousPage2UrlKey", "PreviousPage2Url"))
@@ -260,15 +247,12 @@ namespace BlazorServerApp_Server.Services
 
             _logger.LogInformation($"NavigationPredictorService: Saving model to {ModelPath}");
 
-            // Create schema from the training data (or re-create if needed)
-            var trainingData = LoadTestData(); // Ensure it matches what was used during training
+            var trainingData = LoadTestData(); // cuvamo set koji smo koristili za treniranje
             IDataView dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
 
             // Save the model along with the input schema
             _mlContext.Model.Save(_trainedModel, dataView.Schema, ModelPath);
         }
-
-
 
         private void LoadModel()
         {
@@ -276,8 +260,6 @@ namespace BlazorServerApp_Server.Services
             _logger.LogInformation($"NavigationPredictorService: Loading model from {ModelPath}");
             ITransformer loadedModel = _mlContext.Model.Load(ModelPath, out DataViewSchema modelSchema);
 
-            // Re-load test data to get _allPossiblePageUrls (simplistic for this example)
-            // In production, this list would be derived from your known routes or saved with the model.
             LoadTestData();
 
             _trainedModel = loadedModel;
@@ -287,7 +269,6 @@ namespace BlazorServerApp_Server.Services
             _logger.LogInformation("NavigationPredictorService: Model loaded successfully.");
         }
 
-        // --- Prediction Logic ---
         /// <summary>
         /// Predicts the most likely next pages based on the trained ML.NET model,
         /// considering last 3 pages, time of day, user ID, and device type.
@@ -307,10 +288,9 @@ namespace BlazorServerApp_Server.Services
                 return Enumerable.Empty<string>();
             }
 
-            // Create input for prediction
             var input = new AdvancedNavigationLogEntry
             {
-                PreviousPage1Url = currentPageUrl, // Current page is the most recent previous page
+                PreviousPage1Url = currentPageUrl,
                 PreviousPage2Url = previousPage2Url,
                 PreviousPage3Url = previousPage3Url,
                 TimeOfDayInHours = timeOfDayInHours,
@@ -318,10 +298,8 @@ namespace BlazorServerApp_Server.Services
                 DeviceType = deviceType
             };
 
-            // Predict. This will give scores for ALL possible next pages.
             NavigationPredictionOutput prediction = _predictionEngine.Predict(input);
 
-            // Map scores back to Page URLs
             var scoresWithUrls = new List<(string Url, float Score)>();
             for (int i = 0; i < prediction.Scores.Length; i++)
             {
@@ -336,7 +314,6 @@ namespace BlazorServerApp_Server.Services
                 }
             }
 
-            // Order by score descending and take the top N
             var topPredictions = scoresWithUrls
                 .OrderByDescending(x => x.Score)
                 .Take(maxPredictions)
@@ -348,16 +325,16 @@ namespace BlazorServerApp_Server.Services
             return topPredictions;
         }
 
-        // --- Live Data Tracking (for future model re-training) ---
-        // This method would need to capture all the new features for future training
+        //Summary
+        //To retrain the model in the future
         public void RecordNavigation(
-            string previousPage1Url, // Current page when navigation occurred
+            string previousPage1Url,
             string previousPage2Url,
             string previousPage3Url,
             float timeOfDayInHours,
             string userId,
             string deviceType,
-            string nextPageUrl) // The page the user actually navigated to
+            string nextPageUrl)
         {
             _logger.LogInformation(
                 $"Advanced navigation recorded for future ML training: P1:{previousPage1Url}, P2:{previousPage2Url}, P3:{previousPage3Url}, Time:{timeOfDayInHours}, User:{userId}, Device:{deviceType} -> {nextPageUrl}");

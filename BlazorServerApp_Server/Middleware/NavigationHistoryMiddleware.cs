@@ -1,6 +1,4 @@
 ﻿using BlazorServerApp_Server.Services;
-using Microsoft.AspNetCore.Http;
-using System.Threading.Tasks;
 
 namespace BlazorServerApp_Server.Middleware
 {
@@ -15,9 +13,8 @@ namespace BlazorServerApp_Server.Middleware
             _logger = logger;
         }
 
-        public async Task InvokeAsync(HttpContext context /*, IServiceScopeFactory serviceScopeFactory - no longer needed for Singleton */)
+        public async Task InvokeAsync(HttpContext context)
         {
-            // Only track actual page requests, not static files, Blazor hub, etc.
             bool isPageRequest = !context.Request.Path.StartsWithSegments("/_framework") &&
                                  !context.Request.Path.StartsWithSegments("/_blazor") &&
                                  !context.Request.Path.StartsWithSegments("/css") &&
@@ -26,11 +23,9 @@ namespace BlazorServerApp_Server.Middleware
 
             if (isPageRequest)
             {
-                // Get the Singleton service directly from the HttpContext.RequestServices
-                // No need for IServiceScopeFactory for a Singleton service
                 var pageHistoryService = context.RequestServices.GetRequiredService<InMemoryPageHistoryService>();
 
-                string userId = context.Connection.Id; // Using Connection.Id for demo
+                string userId = context.Connection.Id; //samo za svrhu demonstracije
                 string pageUrl = context.Request.Path.Value!;
                 string deviceType = InMemoryPageHistoryService.GetDeviceTypeFromUserAgent(context.Request.Headers["User-Agent"].ToString());
 
@@ -44,11 +39,10 @@ namespace BlazorServerApp_Server.Middleware
                 }
             }
 
-            await _next(context); // Continue processing the request
+            await _next(context); 
         }
     }
 
-    // Extension method to easily add the middleware
     public static class NavigationHistoryMiddlewareExtensions
     {
         public static IApplicationBuilder UseNavigationHistory(this IApplicationBuilder builder)

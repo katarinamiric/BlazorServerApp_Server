@@ -1,10 +1,10 @@
 ﻿@using System.Reflection
 @using Microsoft.AspNetCore.Components.Routing
 @using BlazorServerApp_Server.Components.Layout
-@using BlazorServerApp_Server.Components.Pages // Assuming your pages are here
+@using BlazorServerApp_Server.Components.Pages 
 @using BlazorServerApp_Server 
-@using BlazorServerApp_Server.Components.Pages // Ensure this is at the top of your router component file
-@using BlazorServerApp_Server.Services // For NavigationRuleEngine, PrerenderRegistry etc.
+@using BlazorServerApp_Server.Components.Pages 
+@using BlazorServerApp_Server.Services
 
 @using Microsoft.Identity.Client
 // Assuming your Prerenderer is in root namespace
@@ -25,11 +25,11 @@
 
 @code {
 
-    [Inject] NavigationTracker NavTracker { get; set; }
+    // [Inject] NavigationTracker NavTracker { get; set; }
     [Inject] NavigationRuleEngine RuleEngine { get; set; }
     [Inject] BackgroundPagePrerenderer Prerenderer { get; set; }
     [Inject] ILogger<Routes> Logger { get; set; }
-    [Inject] BrowserHistoryService BrowserHistory { get; set; }
+    // [Inject] BrowserHistoryService BrowserHistory { get; set; }
 
     private async Task OnNavigateAsync(NavigationContext context)
     {
@@ -50,7 +50,7 @@
         // }
 
         var currentPage = context.Path;
-        NavTracker.Update(currentPage); // Update your simple NavigationTracker
+        // NavTracker.Update(currentPage); 
 
         Logger.LogInformation($"Navigation detected to: {currentPage}. Initiating background prerendering tasks...");
 

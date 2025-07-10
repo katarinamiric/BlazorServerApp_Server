@@ -1,0 +1,91 @@
+﻿@inject WeatherPrerenderDataService ForecastService
+@inject ILogger<TestLive> Logger
+
+<p><em>(Live content rendered)</em></p>
+
+@if (forecasts == null)
+{
+    <p><em>Loading weather data...</em></p>
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th aria-label="Temperature in Celsius">Temp. (C)</th>
+                <th aria-label="Temperature in Farenheit">Temp. (F)</th>
+                <th>Summary</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var forecast in forecasts)
+            {
+                <tr>
+                    <td>@forecast.Date.ToShortDateString()</td>
+                    <td>@forecast.TemperatureC</td>
+                    <td>@forecast.TemperatureF</td>
+                    <td>@forecast.Summary</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] // This parameter will receive cached data from the host page
+    public string?[]? InitialDestinations { get; set; }
+
+    private WeatherForecast[]? forecasts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("WeatherLive: OnInitializedAsync called.");
+
+        string?[] destinations;
+
+        // Check if initial data was provided by the host (from Redis cache via [Parameter])
+        if (InitialDestinations != null && InitialDestinations.Length > 0)
+        {
+            destinations = InitialDestinations;
+            Logger.LogInformation("WeatherLive: Using initial data provided by host page.");
+        }
+        else
+        {
+            // Fallback: Fetch data live if not provided by host
+            Logger.LogInformation("WeatherLive: Initial data not provided. Fetching live data via service.");
+            // Replace with your actual service call for live data
+            destinations = await ForecastService.GetPrerenderDataAsync();
+            if (destinations == null || destinations.Length == 0)
+            {
+                // Fallback if service returns null or empty
+                destinations = new[] { "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching" };
+            }
+        }
+
+        // Simulate asynchronous loading (remove for real applications unless needed for actual API latency)
+        await Task.Delay(500);
+
+        var startDate = DateOnly.FromDateTime(DateTime.Now);
+        forecasts = Enumerable.Range(1, 5).Select(index => new WeatherForecast
+        {
+            Date = startDate.AddDays(index),
+            TemperatureC = Random.Shared.Next(-20, 55),
+            Summary = destinations[Random.Shared.Next(destinations.Length)]
+        }).ToArray();
+
+        Logger.LogInformation("WeatherLive: Forecasts generated.");
+    }
+
+    // Your existing WeatherForecast class (can be moved to a shared Models folder)
+    private class WeatherForecast
+    {
+        public DateOnly Date { get; set; }
+        public int TemperatureC { get; set; }
+        public string? Summary { get; set; }
+        public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
+    }
+}

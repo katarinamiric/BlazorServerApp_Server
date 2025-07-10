@@ -1,8 +1,9 @@
 ﻿@page "/report"
 @using BlazorServerApp_Server.Data
+@using BlazorServerApp_Server.Redis
 @using BlazorServerApp_Server.Services
 @inject ReportDataService ReportDataService
-@inject HtmlCache Cache
+@inject RedisHtmlCache Cache
 @inject ILogger<Report> Logger
 
 <PageTitle>Heavy Report</PageTitle>
@@ -49,6 +50,7 @@ else
 }
 
 @code {
+
     private ReportData reportData = new ReportData();
     private bool isInitialLoad = true; 
 
@@ -59,9 +61,10 @@ else
     {
         Logger.LogInformation("HeavyReport: OnInitializedAsync called.");
 
-        if (isInitialLoad && InitialData != null)
+        var data = await Cache.TryGetDataAsync<ReportData>("ReportPrerendered");
+        if (data != null)
         {
-            reportData = InitialData;
+            reportData = data;
             reportData.DataSource = "Server Prerendered (from parameter)";
             Logger.LogInformation($"HeavyReport: Loaded from prerendered InitialData at {DateTime.Now:HH:mm:ss.fff}");
         }

@@ -4,7 +4,7 @@ using BlazorServerApp_Server.Data;
 
 public class WeatherPrerenderDataService : IPrerenderDataService<Weather, string[]>
 {
-    private readonly IServiceScopeFactory _scopeFactory; // NEW: Inject IServiceScopeFactory
+    private readonly IServiceScopeFactory _scopeFactory;
 
     public WeatherPrerenderDataService(IServiceScopeFactory scopeFactory)
     {
@@ -13,7 +13,7 @@ public class WeatherPrerenderDataService : IPrerenderDataService<Weather, string
 
     public Task<string[]> GetPrerenderDataAsync()
     {
-        using (var scope = _scopeFactory.CreateScope()) // NEW: Create a new scope
+        using (var scope = _scopeFactory.CreateScope())
         {
             var _context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var reportData = _context.Weather.ToList();

@@ -1,6 +1,4 @@
-﻿using System.ComponentModel;
-
-namespace BlazorServerApp_Server
+﻿namespace BlazorServerApp_Server
 {
     public interface IPrerenderDataService<TComponent, TData> where TData : class
     {

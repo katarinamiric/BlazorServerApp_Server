@@ -10,13 +10,13 @@ namespace BlazorServerApp_Server.Services // Or BlazorServerApp_Server.MLModels 
     public class AdvancedNavigationLogEntry
     {
         // Features (Inputs to the model)
-        [LoadColumn(0)] public string PreviousPage1Url { get; set; } = string.Empty; // Most recent previous page
-        [LoadColumn(1)] public string PreviousPage2Url { get; set; } = string.Empty; // Second most recent
-        [LoadColumn(2)] public string PreviousPage3Url { get; set; } = string.Empty; // Third most recent
+        [LoadColumn(0)] public string PreviousPage1Url { get; set; } = string.Empty;
+        [LoadColumn(1)] public string PreviousPage2Url { get; set; } = string.Empty;
+        [LoadColumn(2)] public string PreviousPage3Url { get; set; } = string.Empty;
 
-        [LoadColumn(3)] public float TimeOfDayInHours { get; set; } // e.g., 14.5 for 2:30 PM
+        [LoadColumn(3)] public float TimeOfDayInHours { get; set; }
         [LoadColumn(4)] public string UserId { get; set; } = string.Empty;
-        [LoadColumn(5)] public string DeviceType { get; set; } = string.Empty; // e.g., "Desktop", "Mobile", "Tablet"
+        [LoadColumn(5)] public string DeviceType { get; set; } = string.Empty;
 
         // Label (Output for the model to predict)
         [LoadColumn(6)]
