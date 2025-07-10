@@ -1,14 +1,60 @@
 ﻿@page "/weather-prerendered"
-@inject HtmlCache Cache
+@using BlazorServerApp_Server.Redis
+@inject RedisHtmlCache Cache
+@inject ILogger<WeatherHost> Logger
 
-<h3>Weather (Prerendered)</h3>
+<PageTitle>Weather (Prerendered)</PageTitle>
 
-@if (Cache.Get("Weather") is string html)
+@if (isLoading)
 {
-    @((MarkupString)html)
-    Cache.ClearData("");
+    <p><em>Loading cached weather data...</em></p>
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else if (!string.IsNullOrEmpty(cachedHtmlContent))
+{
+    @* Display the cached HTML directly *@
+    Logger.LogInformation($"WeatherPrerendered: Displaying HTML from Redis cache for Weather.");
+    @((MarkupString)cachedHtmlContent)
+
+    @* Optional: Clear HTML cache after display if it's a one-time view or you want to force re-prerender on next access *@
+    @* _ = Cache.ClearHtmlAsync("Weather"); // Fire-and-forget clear *@
 }
 else
 {
-    <p>Loading...</p>
+    @* Fallback if Redis cache is empty or expired. Render the "live" component. *@
+    Logger.LogWarning($"WeatherPrerendered: Redis cache miss for Weather. Rendering live version.");
+    <p><em>Prerendered content not available. Loading live data...</em></p>
+
+    @* IMPORTANT: Directly render the Weather component here.
+       It will then execute its own OnInitializedAsync and fetch data. *@
+    <Weather /> @* Assuming your original Weather.razor is the "live" version *@
+}
+
+@code {
+    private string? cachedHtmlContent;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("WeatherPrerendered: OnInitializedAsync called to check Redis cache.");
+
+        isLoading = true; // Set loading state
+        try
+        {
+            // Attempt to retrieve the prerendered HTML from Redis Cache
+            // The key "Weather" should match what BackgroundPagePrerenderer uses to store it.
+            cachedHtmlContent = await Cache.GetHtmlAsync("Weather");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error fetching cached HTML for Weather.");
+            cachedHtmlContent = null; // Ensure fallback if cache access fails
+        }
+        finally
+        {
+            isLoading = false; // Clear loading state
+        }
+    }
 }

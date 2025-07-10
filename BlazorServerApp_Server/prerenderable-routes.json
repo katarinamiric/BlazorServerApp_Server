@@ -1,0 +1,6 @@
+{
+  "prerendable-routes": [
+    "/",
+    "/weather"
+  ]
+}

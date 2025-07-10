@@ -1,8 +1,9 @@
 ﻿@page "/report"
 @using BlazorServerApp_Server.Data
+@using BlazorServerApp_Server.Redis
 @using BlazorServerApp_Server.Services
 @inject ReportDataService ReportDataService
-@inject HtmlCache Cache
+@inject RedisHtmlCache Cache
 @inject ILogger<Report> Logger
 
 <PageTitle>Heavy Report</PageTitle>
@@ -11,7 +12,7 @@
 
 <p>This page demonstrates a scenario where data fetching can be slow. Your prerendering solution helps here!</p>
 
-@if (reportData.GeneratedAt == default(DateTime)) // Initial state, data not loaded yet
+@if (reportData.GeneratedAt == default(DateTime)) 
 {
     <div class="loading-indicator">
         <p><em>Loading complex report data... Please wait.</em></p>
@@ -49,10 +50,10 @@ else
 }
 
 @code {
-    private ReportData reportData = new ReportData();
-    private bool isInitialLoad = true; // Flag to track if it's the very first render cycle
 
-    // This parameter will receive the prerendered data from BackgroundPagePrerenderer
+    private ReportData reportData = new ReportData();
+    private bool isInitialLoad = true; 
+
     [Parameter]
     public ReportData? InitialData { get; set; }
 
@@ -60,23 +61,20 @@ else
     {
         Logger.LogInformation("HeavyReport: OnInitializedAsync called.");
 
-        // Check if InitialData was supplied (meaning it came from prerendering)
-        // and if it's the first time OnInitializedAsync runs for this instance.
-        if (isInitialLoad && InitialData != null)
+        var data = await Cache.TryGetDataAsync<ReportData>("ReportPrerendered");
+        if (data != null)
         {
-            reportData = InitialData;
+            reportData = data;
             reportData.DataSource = "Server Prerendered (from parameter)";
             Logger.LogInformation($"HeavyReport: Loaded from prerendered InitialData at {DateTime.Now:HH:mm:ss.fff}");
         }
         else
         {
-            // If InitialData was not supplied, or if it's a subsequent client-side refresh/navigation,
-            // fetch fresh data.
             Logger.LogInformation($"HeavyReport: Fetching data (client-side or refresh) at {DateTime.Now:HH:mm:ss.fff}");
             reportData = await ReportDataService.GetComplexReportDataAsync();
             reportData.DataSource = "Client-side (fresh fetch)";
         }
 
-        isInitialLoad = false; // Mark that the initial load is done
+        isInitialLoad = false; 
     }
 }

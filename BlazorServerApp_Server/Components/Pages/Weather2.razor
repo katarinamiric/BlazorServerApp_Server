@@ -23,10 +23,17 @@
     For local debugging, enable the <strong>Development</strong> environment by setting the <strong>ASPNETCORE_ENVIRONMENT</strong> environment variable to <strong>Development</strong>
     and restarting the app.
 </p>
+<div class="row">
+    <input type="text" @bind-Value="InputText" @bind-Value:event="oninput" />
+    <br />
+    <p>@InputText</p>
+</div>
 
-@code{
+@code {
     [CascadingParameter]
     private HttpContext? HttpContext { get; set; }
+
+    private string InputText { get; set; } = string.Empty;
 
     private string? RequestId { get; set; }
     private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);

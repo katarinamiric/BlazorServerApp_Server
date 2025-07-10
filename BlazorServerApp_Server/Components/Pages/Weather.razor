@@ -35,7 +35,7 @@ else
 
 @code {
     private WeatherForecast[]? forecasts;
-
+    
     protected override async Task OnInitializedAsync()
     {
         _cache.TryGetValue<string[]>("Weather_Data", out var destinations);

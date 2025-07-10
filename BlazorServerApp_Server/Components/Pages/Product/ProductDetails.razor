@@ -1,0 +1,287 @@
+﻿@page "/product/{id:int}"
+@inject ProductService ProductService
+@using BlazorServerApp_Server.Data.Model
+@using BlazorServerApp_Server.Services
+@* @rendermode InteractiveServer *@
+
+<PageTitle>@Product?.Name - Product Details</PageTitle>
+
+@if (Product == null)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading product...</span>
+        </div>
+        <p class="ms-3">Loading product details...</p>
+    </div>
+}
+else
+{
+    <div class="container mt-5 product-details-container">
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="main-image-wrapper border rounded shadow-sm p-3">
+                    <img src="@Product.ImageUrl" class="img-fluid rounded" alt="@Product.Name" />
+                </div>
+                @if (Product.AdditionalImageUrls.Any())
+                {
+                    <div class="thumbnail-gallery mt-3 d-flex flex-wrap gap-2 justify-content-center">
+                        @foreach (var imageUrl in Product.AdditionalImageUrls)
+                        {
+                            <div class="thumbnail-wrapper border rounded shadow-sm">
+                                <img src="@imageUrl" class="img-fluid rounded" alt="Thumbnail of @Product.Name" />
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <h1 class="display-4 mb-3 product-title">@Product.Name</h1>
+                <p class="lead text-muted product-brand-category">
+                    Brand: <span class="fw-bold">@Product.Brand</span> | Category: <span class="fw-bold">@Product.Category</span>
+                </p>
+                <div class="price-section mb-4">
+                    <h2 class="text-primary display-5 fw-bold">$@Product.Price.ToString("N2")</h2>
+                    <div class="rating-reviews">
+                        @RenderStars(Product.Rating)
+                        <span class="ms-2 text-muted">(@Product.ReviewsCount Reviews)</span>
+                    </div>
+                </div>
+
+                <p class="product-description mb-4">@((MarkupString)Product.Description)</p>
+
+                <div class="d-grid gap-2 mb-4">
+                    <button class="btn btn-primary btn-lg">Add to Cart <i class="bi bi-cart-plus"></i></button>
+                    <button class="btn btn-outline-secondary btn-lg">Buy Now</button>
+                </div>
+
+                <div class="accordion" id="productAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingFeatures">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFeatures" aria-expanded="false" aria-controls="collapseFeatures">
+                                Key Features
+                            </button>
+                        </h2>
+                        <div id="collapseFeatures" class="accordion-collapse collapse" aria-labelledby="headingFeatures" data-bs-parent="#productAccordion">
+                            <div class="accordion-body">
+                                @((MarkupString)Product.LongFeatureList)
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingSpecs">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSpecs" aria-expanded="false" aria-controls="collapseSpecs">
+                                Technical Specifications
+                            </button>
+                        </h2>
+                        <div id="collapseSpecs" class="accordion-collapse collapse" aria-labelledby="headingSpecs" data-bs-parent="#productAccordion">
+                            <div class="accordion-body">
+                                @((MarkupString)Product.TechnicalSpecifications)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (RelatedProducts != null && RelatedProducts.Any())
+        {
+            <hr class="my-5" />
+            <h3 class="mb-4 text-center">Related Products</h3>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4">
+                @foreach (var relatedProduct in RelatedProducts)
+                {
+                    <div class="col">
+                        <div class="card h-100 shadow-sm product-card">
+                            <img src="@relatedProduct.ImageUrl" class="card-img-top related-product-img" alt="@relatedProduct.Name">
+                            <div class="card-body d-flex flex-column">
+                                <h5 class="card-title text-truncate">@relatedProduct.Name</h5>
+                                <p class="card-text text-primary fw-bold">$@relatedProduct.Price.ToString("N2")</p>
+                                <div class="rating-reviews mb-2">
+                                    @RenderStars(relatedProduct.Rating)
+                                    <span class="ms-1 text-muted">(@relatedProduct.ReviewsCount)</span>
+                                </div>
+                                <div class="mt-auto">
+                                    <a href="/product/@relatedProduct.Id" class="btn btn-outline-primary btn-sm w-100">View Details</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Product? Product;
+    private List<Product>? RelatedProducts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Console.WriteLine($"ProductDetails page OnInitializedAsync for product ID: {Id}");
+        Product = await ProductService.GetProductByIdAsync(Id);
+
+        if (Product != null)
+        {
+            RelatedProducts = await ProductService.GetRelatedProductsAsync(Id, 4); // Fetch up to 4 related products
+        }
+    }
+
+    private MarkupString RenderStars(double rating)
+    {
+        var fullStars = (int)Math.Floor(rating);
+        var halfStar = rating - fullStars >= 0.5;
+        var emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
+
+        var starsHtml = new System.Text.StringBuilder();
+        for (int i = 0; i < fullStars; i++)
+        {
+            starsHtml.Append("<i class=\"bi bi-star-fill text-warning\"></i>");
+        }
+        if (halfStar)
+        {
+            starsHtml.Append("<i class=\"bi bi-star-half text-warning\"></i>");
+        }
+        for (int i = 0; i < emptyStars; i++)
+        {
+            starsHtml.Append("<i class=\"bi bi-star text-warning\"></i>");
+        }
+        return new MarkupString(starsHtml.ToString());
+    }
+}
+
+<style>
+    /* Modern UI Styling */
+    .product-details-container {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        color: #333;
+    }
+
+    .main-image-wrapper {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 1rem;
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.05) !important;
+        transition: transform 0.3s ease;
+    }
+
+        .main-image-wrapper:hover {
+            transform: scale(1.01);
+        }
+
+    .thumbnail-gallery .thumbnail-wrapper {
+        width: 100px;
+        height: 100px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #ced4da;
+        border-radius: .25rem;
+        box-shadow: 0 .125rem .25rem rgba(0,0,0,.075) !important;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+        .thumbnail-gallery .thumbnail-wrapper:hover {
+            transform: translateY(-3px);
+            border-color: #007bff;
+        }
+
+    .thumbnail-gallery img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover; /* Ensures images fill the thumbnail area */
+    }
+
+
+    .product-title {
+        font-weight: 700;
+        color: #212529;
+    }
+
+    .product-brand-category {
+        font-size: 1.1rem;
+        color: #6c757d;
+    }
+
+    .price-section {
+        background-color: #e9f7fe;
+        padding: 1.5rem;
+        border-radius: .5rem;
+        border: 1px solid #bee5eb;
+    }
+
+        .price-section h2 {
+            color: #007bff;
+        }
+
+    .rating-reviews .bi {
+        color: #ffc107; /* Bootstrap yellow for stars */
+        font-size: 1.2rem;
+    }
+
+    .product-description {
+        font-size: 1.05rem;
+        line-height: 1.7;
+        color: #495057;
+    }
+
+    .accordion-item {
+        margin-bottom: 10px;
+        border: 1px solid #e0e0e0;
+        border-radius: .25rem;
+        overflow: hidden; /* For rounded corners */
+    }
+
+    .accordion-button {
+        font-weight: 600;
+        color: #495057;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+        .accordion-button:not(.collapsed) {
+            color: #007bff;
+            background-color: #e9f7fe;
+        }
+
+    .accordion-body {
+        background-color: #fff;
+        line-height: 1.6;
+        color: #495057;
+        padding: 1.5rem;
+        white-space: pre-wrap; /* Preserve formatting for heavy text */
+    }
+
+    /* Related Products Section */
+    .related-product-img {
+        height: 200px; /* Fixed height for consistent cards */
+        object-fit: cover; /* Cover the area, cropping if necessary */
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .product-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        border: 1px solid #e9ecef;
+    }
+
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 1rem 3rem rgba(0,0,0,.175) !important;
+        }
+
+    .btn-outline-primary {
+        border-color: #007bff;
+        color: #007bff;
+    }
+
+        .btn-outline-primary:hover {
+            background-color: #007bff;
+            color: #fff;
+        }
+</style>

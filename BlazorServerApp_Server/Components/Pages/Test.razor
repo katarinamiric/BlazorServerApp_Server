@@ -1,0 +1,62 @@
+﻿@* @page "/weather"  *@
+@using BlazorServerApp_Server.Redis
+@using BlazorServerApp_Server.Components.Layout
+@inject RedisHtmlCache Cache
+@inject ILogger<Weather> Logger
+
+<PageTitle>Weather Report</PageTitle>
+
+<h1>Weather Forecast</h1>
+
+@*
+    We always render the WeatherLive component.
+    Its OnInitializedAsync will either use the InitialDestinations parameter (if we found cached data)
+    or fetch its own data live.
+*@
+<TestLive InitialDestinations="cachedDestinations" />
+
+@code {
+    // This will hold the weather summary data (e.g., "Freezing", "Chilly")
+    // that might be retrieved from Redis.
+    private string?[]? cachedDestinations;
+
+    // We keep isLoading mainly for showing a loading spinner if the *data fetch from Redis* itself is slow.
+    // However, since the Blazor hydration takes over, a simple direct render of WeatherLive is often fine.
+    // private bool isLoading = true; // Uncomment and use in UI if you want a loading state for the cache lookup itself
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logger.LogInformation("Weather (Host Page): OnInitializedAsync called to retrieve data from Redis.");
+
+        // Uncomment and use isLoading if you added a loading spinner around <WeatherLive>
+        // isLoading = true;
+        try
+        {
+            // Attempt to retrieve the cached data (destinations array) from Redis.
+            // The key "Weather_Data" should match what BackgroundPagePrerenderer uses to store it.
+            cachedDestinations = await Cache.TryGetDataAsync<string?[]>("Weather_Data");
+
+            if (cachedDestinations != null)
+            {
+                Logger.LogInformation($"Weather (Host Page): Data for WeatherLive found in cache. Count: {cachedDestinations.Length}.");
+                // Optional: If you want to clear the data after consumption, do it here.
+                // This would make the page fetch live data on subsequent visits until re-prerendered.
+                // _ = Cache.ClearDataAsync("Weather_Data"); // Fire-and-forget
+            }
+            else
+            {
+                Logger.LogInformation("Weather (Host Page): Data not found in cache. WeatherLive will fetch its own data.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Weather (Host Page): Error fetching data from Redis. Falling back to live data in WeatherLive.");
+            cachedDestinations = null; // Ensure fallback to live fetch on error
+        }
+        // Uncomment and use isLoading
+        // finally
+        // {
+        //     isLoading = false;
+        // }
+    }
+}

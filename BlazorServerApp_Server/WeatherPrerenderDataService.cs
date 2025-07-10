@@ -1,14 +1,24 @@
 ﻿using BlazorServerApp_Server;
 using BlazorServerApp_Server.Components.Pages;
+using BlazorServerApp_Server.Data;
 
 public class WeatherPrerenderDataService : IPrerenderDataService<Weather, string[]>
 {
-    public WeatherPrerenderDataService()
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public WeatherPrerenderDataService(IServiceScopeFactory scopeFactory)
     {
+        _scopeFactory = scopeFactory;
     }
 
     public Task<string[]> GetPrerenderDataAsync()
     {
-        return Task.FromResult(new[] { "FreezingCached", "BracingCached", "ChillyCached", "CoolCached", "MildCached", "WarmCached", "BalmyCached", "HotCached", "SwelteringCached", "ScorchingCached" });
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var _context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var reportData = _context.Weather.ToList();
+
+            return Task.FromResult(reportData.Select(w => w.Value).ToArray());
+        }
     }
 }

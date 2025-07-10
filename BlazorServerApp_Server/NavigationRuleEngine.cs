@@ -1,84 +1,133 @@
-﻿using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
+﻿using BlazorServerApp_Server.Redis;
+using BlazorServerApp_Server.Services;
+using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
 
 namespace BlazorServerApp_Server
 {
     public class NavigationRuleEngine
     {
-        private readonly PrerenderRegistry _prerenderRegistry; // Inject the registry
-
-        public NavigationRuleEngine(PrerenderRegistry prerenderRegistry)
-        {
-            _prerenderRegistry = prerenderRegistry;
-        }
-
+        private readonly RedisPrerenderRegistry _prerenderRegistry;
+        private readonly ILogger<NavigationRuleEngine> _logger;
+        private readonly NavigationPredictorService _navigationPredictor;
+        private const int MaxHistory = 3;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly InMemoryPageHistoryService _inMemoryPageHistoryService;
         private HashSet<Type> _lastRegisteredPageTypes = new HashSet<Type>();
 
-        private readonly Dictionary<string, string[]> _rules = new()
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private Queue<string> _pageHistory = new Queue<string>(3);
+        public NavigationRuleEngine(RedisPrerenderRegistry prerenderRegistry, ILogger<NavigationRuleEngine> logger,
+            NavigationPredictorService navigationPredictor, IServiceScopeFactory scopeFactory,
+            InMemoryPageHistoryService inMemoryPageHistoryService, IHttpContextAccessor httpContextAccessor)
         {
-            { "", new[] { "/weather" } },
-            //{ "weather-prerendered", new[] { "/weather2" } },
-            { "/contact", new[] { "/weather2" } },
-            { "weather-prerendered", new[] { "/heavy-report" } }
-            // Later, you can update this based on usage statistics.
-        };
+            _prerenderRegistry = prerenderRegistry;
+            _logger = logger;
+            _navigationPredictor = navigationPredictor;
+            _scopeFactory = scopeFactory;
+            _inMemoryPageHistoryService = inMemoryPageHistoryService;
+            _httpContextAccessor = httpContextAccessor;
 
-        public IEnumerable<string> GetPagesToPrerender(string? currentPage)
-        {
-            if (currentPage == null) return Enumerable.Empty<string>();
-            var currentPageTypesToRegister = new HashSet<Type>(); // Pages that should be active for this prediction cycle
-            var pagesToPrerender = _rules.TryGetValue(currentPage, out var targets) ? targets : Enumerable.Empty<string>();
-            foreach (var targetUrl in pagesToPrerender)
-            {
-                var pageType = GetPageTypeFromUrl(targetUrl); // Convert URL string to Type
-                if (pageType != null)
-                {
-                    currentPageTypesToRegister.Add(pageType);
-                }
-                else
-                {
-                    Console.WriteLine($"[NavigationRuleEngine] Warning: No page Type found for URL: {targetUrl}");
-                }
-            }
 
-            foreach (var prevType in _lastRegisteredPageTypes)
-            {
-                if (!currentPageTypesToRegister.Contains(prevType))
-                {
-                    _prerenderRegistry.UnregisterPageForPrerendering(prevType);
-                }
-            }
-            // Register pages that are newly predicted or remain active
-            foreach (var currentType in currentPageTypesToRegister)
-            {
-                _prerenderRegistry.RegisterPageForPrerendering(currentType);
-            }
-
-            // Update the set of last registered pages for the next cycle
-            _lastRegisteredPageTypes = currentPageTypesToRegister;
-
-            return pagesToPrerender;
+            for (int i = 0; i < MaxHistory; i++) _pageHistory.Enqueue("");
         }
+
+
+        //private readonly Dictionary<string, string[]> _rules = new()
+        //{
+        //    { "", new[] { "/weather" } },
+        //    //{ "weather-prerendered", new[] { "/weather2" } },
+        //    { "weather-prerendered", new[] { "/heavy-report" } }
+        //};
+
+        public async Task<IEnumerable<string>> GetPagesToPrerender(string? currentPage)
+        {
+            using (var scope = _scopeFactory.CreateScope()) 
+            {
+                //var _context = scope.ServiceProvider.GetRequiredService<BrowserHistoryService>();
+                if (string.IsNullOrEmpty(currentPage))
+                {
+                    _logger.LogInformation("GetPagesToPrerender: Current page is empty. No pages to prerender.");
+                    return Enumerable.Empty<string>();
+                }
+
+                string userId = _httpContextAccessor.HttpContext?.Connection.Id ?? "default_anonymous_user";
+                string deviceType = InMemoryPageHistoryService.GetDeviceTypeFromUserAgent( 
+                    _httpContextAccessor.HttpContext?.Request.Headers["User-Agent"].ToString() ?? "");
+
+                var historyArray = await _inMemoryPageHistoryService.GetLastNPagesAsync(userId);
+
+                string previousPage1 = historyArray[2]; // Most recent
+                string previousPage2 = historyArray[1]; // Second most recent
+                string previousPage3 = historyArray[0]; // Third most recent
+
+                float timeOfDayInHours = (float)DateTime.Now.Hour + (float)DateTime.Now.Minute / 60f;
+
+                //string userId = "simulated_user_id"; // Zovi AuthenticationStateProvider ili tako nesto
+                //string deviceType = "Desktop";
+
+                _logger.LogInformation(
+                    $"GetPagesToPrerender: Requesting ML.NET prediction for '{currentPage}' with context (P1:{previousPage1}, P2:{previousPage2}, P3:{previousPage3}, Time:{timeOfDayInHours}, User:{userId}, Device:{deviceType}).");
+
+                var pagesToPrerender = _navigationPredictor.PredictNextPages(
+                    currentPage,
+                    previousPage2,
+                    previousPage3,
+                    timeOfDayInHours,
+                    userId,
+                    deviceType,
+                    maxPredictions: 3).ToList();
+
+                //var pagesToPrerender = _navigationPredictor.PredictNextPages(currentPage, maxPredictions: 1).ToList();
+
+                var currentPageTypesToRegister = new HashSet<Type>();
+                foreach (var targetUrl in pagesToPrerender)
+                {
+                    var pageType = GetPageTypeFromUrl(targetUrl);
+                    if (pageType != null)
+                    {
+                        currentPageTypesToRegister.Add(pageType);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[NavigationRuleEngine] Warning: No page Type found for URL: {targetUrl}");
+                    }
+                }
+
+                foreach (var prevType in _lastRegisteredPageTypes)
+                {
+                    if (!currentPageTypesToRegister.Contains(prevType))
+                    {
+                        await _prerenderRegistry.UnregisterPageForPrerenderingAsync(prevType);
+                    }
+                }
+
+                foreach (var currentType in currentPageTypesToRegister)
+                {
+                    await _prerenderRegistry.RegisterPageForPrerenderingAsync(currentType);
+                }
+
+                _lastRegisteredPageTypes = currentPageTypesToRegister;
+
+                return pagesToPrerender;
+            }
+        }
+
         public Type? GetPageTypeFromUrl(string url)
         {
-            // Normalize URL for consistent matching
             var normalizedUrl = url.TrimEnd('/');
-            if (normalizedUrl == "") return typeof(Components.Pages.Home); // Assuming Home page is at "/"
+            if (normalizedUrl == "") return typeof(Components.Pages.Home);
             if (normalizedUrl.Equals("/weather", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather);
             if (normalizedUrl.Equals("/weather2", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather2);
-            if (normalizedUrl.Equals("/contact", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather2); // Assuming you have a Weather2.razor
-            if (normalizedUrl.Equals("/heavy-report", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.ReportPrerendered); // Assuming you have a Weather2.razor
-            //if (normalizedUrl.Equals("/counter", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Counter);
-            //if (normalizedUrl.Equals("/contact", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Contact);
-            // Add more mappings for your other pages
-            // Example: For dynamic routes like /product/{id}, you might map to typeof(ProductDetail)
-            // if (url.StartsWith("/product/", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.ProductDetail);
+            //if (normalizedUrl.Equals("/contact", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Weather2); 
+            if (normalizedUrl.Equals("/heavy-report", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.ReportPrerendered); 
+            if (normalizedUrl.Contains("/product", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Product.ProductDetails); 
 
-            return null; // No matching page type found
+            return null; 
         }
-        // Optional: expose a method to change the rules dynamically
+
         public void UpdateRules(string sourcePage, string[] destinationPages)
         {
-            _rules[sourcePage] = destinationPages;
+            //_rules[sourcePage] = destinationPages;
         }
     }
 

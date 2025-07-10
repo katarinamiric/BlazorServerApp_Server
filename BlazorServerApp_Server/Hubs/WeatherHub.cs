@@ -5,7 +5,6 @@ namespace BlazorServerApp_Server.Hubs
 
     namespace BlazorServerApp_Server.Hubs
     {
-        // This hub will be used to send real-time notifications to Blazor clients
         public class WeatherHub : Hub
         {
             // You can add methods here that clients can call,

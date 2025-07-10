@@ -1,10 +1,10 @@
 ﻿@using System.Reflection
 @using Microsoft.AspNetCore.Components.Routing
 @using BlazorServerApp_Server.Components.Layout
-@using BlazorServerApp_Server.Components.Pages // Assuming your pages are here
+@using BlazorServerApp_Server.Components.Pages 
 @using BlazorServerApp_Server 
-@using BlazorServerApp_Server.Components.Pages // Ensure this is at the top of your router component file
-@using BlazorServerApp_Server.Services // For NavigationRuleEngine, PrerenderRegistry etc.
+@using BlazorServerApp_Server.Components.Pages 
+@using BlazorServerApp_Server.Services
 
 @using Microsoft.Identity.Client
 // Assuming your Prerenderer is in root namespace
@@ -24,11 +24,12 @@
 </Router>
 
 @code {
-    // [Inject] NavigationManager NavManager { get; set; } // Still usually not needed here for OnNavigateAsync
-    [Inject] NavigationTracker NavTracker { get; set; }
+
+    // [Inject] NavigationTracker NavTracker { get; set; }
     [Inject] NavigationRuleEngine RuleEngine { get; set; }
     [Inject] BackgroundPagePrerenderer Prerenderer { get; set; }
     [Inject] ILogger<Routes> Logger { get; set; }
+    // [Inject] BrowserHistoryService BrowserHistory { get; set; }
 
     private async Task OnNavigateAsync(NavigationContext context)
     {
@@ -49,51 +50,38 @@
         // }
 
         var currentPage = context.Path;
-        NavTracker.Update(currentPage); // Update your simple NavigationTracker
+        // NavTracker.Update(currentPage); 
 
         Logger.LogInformation($"Navigation detected to: {currentPage}. Initiating background prerendering tasks...");
 
-        // 1. Get the URLs of pages to prerender from your rule engine
-        
-        var pagesToPrerenderUrls = RuleEngine.GetPagesToPrerender(currentPage);
 
-        // 2. Iterate through each target page URL
+        // var pagesToPrerenderUrls = NavigationPredictorService.PredictNextPages(currentPage);
+        var pagesToPrerenderUrls = await RuleEngine.GetPagesToPrerender(currentPage);
+
         foreach (var pageUrl in pagesToPrerenderUrls)
         {
-            // 3. Get the actual Blazor component Type from the URL string
-            var pageType = RuleEngine.GetPageTypeFromUrl(pageUrl); // This helper needs to be accessible/called
+            var pageType = RuleEngine.GetPageTypeFromUrl(pageUrl); 
 
             if (pageType != null)
             {
-                // --- Fire-and-Forget Background Task Setup ---
-                // Launch the prerendering task on a thread pool thread without awaiting it.
-                // This immediately frees up the current request thread to render the main page.
                 _ = Task.Run(async () =>
                 {
-                    // IMPORTANT: Create a new DI scope for each background task.
-                    // This is crucial because `BackgroundPagePrerenderer` and its dependencies
-                    // are `Scoped`. A new scope ensures they are correctly resolved and disposed
-                    // within this background operation's lifetime, preventing errors or leaks.
+                  
                     using (var scope = ScopeFactory.CreateScope())
                     {
-                        // Resolve `BackgroundPagePrerenderer` from this new, isolated scope.
-                        // Also resolve a logger for this task's context.
                         var backgroundPrerenderer = scope.ServiceProvider.GetRequiredService<BackgroundPagePrerenderer>();
-                        var taskLogger = scope.ServiceProvider.GetRequiredService<ILogger<Routes>>(); // Use the same logger or create a specific one
+                        var taskLogger = scope.ServiceProvider.GetRequiredService<ILogger<Routes>>();
 
                         try
                         {
                             taskLogger.LogInformation($"Background Prerender starting for: {pageUrl} (in new scope).");
 
-                            // Use reflection to call the generic `PrerenderComponentAsync<T>()` method
-                            // with the dynamically determined `pageType`.
                             var prerenderMethod = typeof(BackgroundPagePrerenderer)
                                 .GetMethod(nameof(BackgroundPagePrerenderer.PrerenderComponentAsync), BindingFlags.Public | BindingFlags.Instance);
 
                             if (prerenderMethod != null)
                             {
                                 var genericPrerenderMethod = prerenderMethod.MakeGenericMethod(pageType);
-                                // Invoke the method and await the returned Task within *this background task*
                                 await (Task)genericPrerenderMethod.Invoke(backgroundPrerenderer, null)!;
                                 taskLogger.LogInformation($"Background Prerender completed for: {pageUrl} (in new scope).");
                             }
@@ -105,9 +93,8 @@
                         catch (Exception ex)
                         {
                             taskLogger.LogError(ex, $"Error during background prerender for {pageUrl} (in new scope).");
-                            // Log the exception, but don't rethrow, as this is a fire-and-forget task.
                         }
-                    } // The 'scope' and all services resolved from it are disposed here.
+                    }
                 });
             }
             else
@@ -116,4 +103,5 @@
             }
         }
     }
+
 }
