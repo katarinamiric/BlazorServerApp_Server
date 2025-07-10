@@ -33,7 +33,7 @@ builder.Services.AddScoped<BrowserHistoryService>();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddHttpContextAccessor();
 // Program.cs
-builder.Services.AddSingleton<InMemoryPageHistoryService>();
+builder.Services.AddSingleton<RedisPageHistoryService>();
 
 builder.Services.AddScoped<BackgroundPagePrerenderer>();
 builder.Services.AddSingleton<WeatherPrerenderDataService>(); 
