@@ -1,5 +1,6 @@
 ﻿@page "/weather"
-@inject HtmlCache _cache
+@using BlazorServerApp_Server.Redis
+@inject RedisHtmlCache _cache
 
 <PageTitle>Weather</PageTitle>
 
@@ -34,11 +35,13 @@ else
 }
 
 @code {
+
     private WeatherForecast[]? forecasts;
-    
+
     protected override async Task OnInitializedAsync()
     {
-        _cache.TryGetValue<string[]>("Weather_Data", out var destinations);
+
+        var destinations = await _cache.TryGetDataAsync<string[]>("Weather");
         if (destinations == null)
         {
             Task.Delay(10000);
