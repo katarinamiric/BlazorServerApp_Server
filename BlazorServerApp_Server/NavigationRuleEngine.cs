@@ -11,20 +11,20 @@ namespace BlazorServerApp_Server
         private readonly NavigationPredictorService _navigationPredictor;
         private const int MaxHistory = 3;
         private readonly IServiceScopeFactory _scopeFactory;
-        private readonly InMemoryPageHistoryService _inMemoryPageHistoryService;
+        private readonly RedisPageHistoryService _redisPageHistoryService;
         private HashSet<Type> _lastRegisteredPageTypes = new HashSet<Type>();
 
         private readonly IHttpContextAccessor _httpContextAccessor;
         private Queue<string> _pageHistory = new Queue<string>(3);
         public NavigationRuleEngine(RedisPrerenderRegistry prerenderRegistry, ILogger<NavigationRuleEngine> logger,
             NavigationPredictorService navigationPredictor, IServiceScopeFactory scopeFactory,
-            InMemoryPageHistoryService inMemoryPageHistoryService, IHttpContextAccessor httpContextAccessor)
+            RedisPageHistoryService redisPageHistoryService, IHttpContextAccessor httpContextAccessor)
         {
             _prerenderRegistry = prerenderRegistry;
             _logger = logger;
             _navigationPredictor = navigationPredictor;
             _scopeFactory = scopeFactory;
-            _inMemoryPageHistoryService = inMemoryPageHistoryService;
+            _redisPageHistoryService = redisPageHistoryService;
             _httpContextAccessor = httpContextAccessor;
 
 
@@ -51,10 +51,10 @@ namespace BlazorServerApp_Server
                 }
 
                 string userId = _httpContextAccessor.HttpContext?.Connection.Id ?? "default_anonymous_user";
-                string deviceType = InMemoryPageHistoryService.GetDeviceTypeFromUserAgent( 
+                string deviceType = RedisPageHistoryService.GetDeviceTypeFromUserAgent( 
                     _httpContextAccessor.HttpContext?.Request.Headers["User-Agent"].ToString() ?? "");
 
-                var historyArray = await _inMemoryPageHistoryService.GetLastNPagesAsync(userId);
+                var historyArray = await _redisPageHistoryService.GetLastNPagesAsync(userId);
 
                 string previousPage1 = historyArray[2]; // Most recent
                 string previousPage2 = historyArray[1]; // Second most recent

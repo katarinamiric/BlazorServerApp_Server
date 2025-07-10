@@ -9,6 +9,7 @@ namespace BlazorServerApp_Server.Services // Or BlazorServerApp_Server.MLModels 
     /// </summary>
     public class AdvancedNavigationLogEntry
     {
+        public int Id { get; set; }
         // Features (Inputs to the model)
         [LoadColumn(0)] public string PreviousPage1Url { get; set; } = string.Empty;
         [LoadColumn(1)] public string PreviousPage2Url { get; set; } = string.Empty;

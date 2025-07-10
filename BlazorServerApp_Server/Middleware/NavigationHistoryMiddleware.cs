@@ -23,11 +23,11 @@ namespace BlazorServerApp_Server.Middleware
 
             if (isPageRequest)
             {
-                var pageHistoryService = context.RequestServices.GetRequiredService<InMemoryPageHistoryService>();
+                var pageHistoryService = context.RequestServices.GetRequiredService<RedisPageHistoryService>();
 
                 string userId = context.Connection.Id; //samo za svrhu demonstracije
                 string pageUrl = context.Request.Path.Value!;
-                string deviceType = InMemoryPageHistoryService.GetDeviceTypeFromUserAgent(context.Request.Headers["User-Agent"].ToString());
+                string deviceType = RedisPageHistoryService.GetDeviceTypeFromUserAgent(context.Request.Headers["User-Agent"].ToString());
 
                 try
                 {
