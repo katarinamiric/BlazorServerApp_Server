@@ -7,8 +7,6 @@ namespace BlazorServerApp_Server.Services
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<BrowserHistoryService> _logger;
 
-        // Using a List to manage history for easier manipulation (Add, RemoveAt, TakeLast)
-        // and then convert to Queue for the 3-page logic if needed by the consumer.
         private List<string> _pageHistoryList = new List<string>();
         private const int MaxHistorySize = 3;
 
@@ -16,8 +14,6 @@ namespace BlazorServerApp_Server.Services
         {
             _jsRuntime = jsRuntime;
             _logger = logger;
-            // Initialize list with empty strings to ensure it always has MaxHistorySize elements
-            // (or enough to prevent null/empty access for previous pages)
             for (int i = 0; i < MaxHistorySize; i++)
             {
                 _pageHistoryList.Add("");
@@ -33,14 +29,10 @@ namespace BlazorServerApp_Server.Services
             {
                 var loadedHistory = await _jsRuntime.InvokeAsync<List<string>>("blazorPageHistory.load");
 
-                // Clear current in-memory history and populate from loaded data
                 _pageHistoryList.Clear();
 
-                // Ensure we only take the last `MaxHistorySize` items and pad if necessary
                 var relevantHistory = loadedHistory.TakeLast(MaxHistorySize).ToList();
                 _pageHistoryList.AddRange(relevantHistory);
-
-                // Pad with empty strings if the loaded history was less than MaxHistorySize
                 while (_pageHistoryList.Count < MaxHistorySize)
                 {
                     _pageHistoryList.Insert(0, ""); // Insert at beginning to maintain order

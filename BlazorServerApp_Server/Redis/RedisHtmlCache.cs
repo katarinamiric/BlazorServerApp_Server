@@ -34,10 +34,10 @@ namespace BlazorServerApp_Server.Redis
                 RedisValue html = await _redisDb.StringGetAsync($"html:{key}");
                     if (html.IsNullOrEmpty)
                 {
-                    _logger.LogInformation($"HTML cache miss for key: html:{key}");
+                    _logger.LogInformation($"HTML cache null for key: html:{key}");
                     return null;
                 }
-                _logger.LogInformation($"HTML cache hit for key: html:{key}");
+                _logger.LogInformation($"HTML cache for key: html:{key}");
                 return html.ToString();
             }
             catch (Exception ex)
@@ -47,8 +47,6 @@ namespace BlazorServerApp_Server.Redis
             }
         }
 
-        // --- Arbitrary Data Caching (similar to your IMemoryCache Set/TryGetValue) ---
-        // This will store value as JSON string
         public async Task SetDataAsync<TItem>(string key, TItem value, TimeSpan? expiry = null)
         {
             try
@@ -82,7 +80,7 @@ namespace BlazorServerApp_Server.Redis
                 return default;
             }
         }
-        public async Task ClearHtmlAsync(string key) // <-- NEW METHOD
+        public async Task ClearHtmlAsync(string key)
         {
             try
             {
@@ -94,7 +92,6 @@ namespace BlazorServerApp_Server.Redis
                 _logger.LogError(ex, $"Error clearing HTML for key: html:{key}");
             }
         }
-        // --- String array data caching (replaces your _data Dictionary) ---
 
         public async Task SetStringArrayDataAsync(string key, string?[] dataArray)
         {

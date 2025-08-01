@@ -3,23 +3,18 @@ using StackExchange.Redis;
 
 namespace BlazorServerApp_Server.Redis
 {
-
     public class RedisPrerenderRegistry
     {
         private readonly IDatabase _redisDb;
         private readonly ILogger<RedisPrerenderRegistry> _logger;
 
-        // Redis Key for the Set storing active prerendered page types
         private const string ActivePrerenderedPagesRedisKey = "prerender:activepages";
 
-        // This mapping is application configuration, not dynamic cache data, so it remains in-memory
         private static readonly Dictionary<string, Type> _tableToComponentMapping =
             new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
             {
                 { "Weather", typeof(BlazorServerApp_Server.Components.Pages.Weather) },
                 { "Report", typeof(BlazorServerApp_Server.Components.Pages.ReportPrerendered) },
-                // Make sure to fully qualify your component paths if they are in different namespaces
-                // e.g., typeof(YourApp.Components.Pages.Weather)
             };
 
         public RedisPrerenderRegistry(IConnectionMultiplexer connectionMultiplexer, ILogger<RedisPrerenderRegistry> logger)
@@ -35,7 +30,6 @@ namespace BlazorServerApp_Server.Redis
                 throw new ArgumentException("Provided type must be a Blazor component.", nameof(componentType));
             }
 
-            // Store the AssemblyQualifiedName for proper deserialization
             string typeName = componentType.AssemblyQualifiedName!;
 
             try
@@ -79,7 +73,7 @@ namespace BlazorServerApp_Server.Redis
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"[RedisPrerenderRegistry] Error checking if {componentType.Name} is actively prerendered.");
-                return false; // Assume not active on error
+                return false; 
             }
         }
 
@@ -120,7 +114,6 @@ namespace BlazorServerApp_Server.Redis
             }
         }
 
-        // This method remains the same as it's static config
         public Type? GetComponentTypeForTable(string tableName)
         {
             _tableToComponentMapping.TryGetValue(tableName, out var componentType);
