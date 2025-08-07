@@ -1,6 +1,13 @@
 {
   "prerendable-routes": [
     "/",
-    "/weather"
+    "/weather",
+    "/women",
+    "/men",
+    "/women/bags",
+    "/men/bags",
+    "/women/shoes",
+    "/men/shoes",
+    "/women/discounts"
   ]
 }

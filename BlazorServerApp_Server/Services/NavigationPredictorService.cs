@@ -213,6 +213,7 @@ namespace BlazorServerApp_Server.Services
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("PreviousPage3UrlKey", "PreviousPage3Url"))
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("UserIdKey", "UserId"))
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("DeviceTypeKey", "DeviceType"))
+                .Append(_mlContext.Transforms.Conversion.MapValueToKey("UserGenderKey", "UserGender"))
 
                 // 2. One-hot encode these numeric keys into sparse vectors
                 .Append(_mlContext.Transforms.Categorical.OneHotEncoding("PreviousPage1UrlEncoded",
@@ -223,6 +224,7 @@ namespace BlazorServerApp_Server.Services
                     "PreviousPage3UrlKey"))
                 .Append(_mlContext.Transforms.Categorical.OneHotEncoding("UserIdEncoded", "UserIdKey"))
                 .Append(_mlContext.Transforms.Categorical.OneHotEncoding("DeviceTypeEncoded", "DeviceTypeKey"))
+                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("UserGenderEncoded", "UserGenderKey"))
 
                 // Concatenate all features into a single 'Features' vector required by the trainer
                 // Include numerical features directly (TimeOfDayInHours)
@@ -232,6 +234,7 @@ namespace BlazorServerApp_Server.Services
                     "PreviousPage3UrlEncoded",
                     "UserIdEncoded",
                     "DeviceTypeEncoded",
+                    "UserGenderEncoded",
                     "TimeOfDayInHours")) // Numerical feature directly included
                 .AppendCacheCheckpoint(_mlContext) // Cache data for faster training
 
@@ -287,7 +290,7 @@ namespace BlazorServerApp_Server.Services
         /// Predicts the most likely next pages based on the trained ML.NET model,
         /// considering last 3 pages, time of day, user ID, and device type.
         /// </summary>
-        public List<string> PredictNextPage(string previousPage1, string previousPage2, string previousPage3, string userId, string deviceType, int maxPredictions = 3)
+        public List<string> PredictNextPage(string previousPage1, string previousPage2, string previousPage3, string userId, string userGender, string deviceType, int maxPredictions = 3)
         {
             if (_predictionEngine == null)
             {
@@ -305,6 +308,7 @@ namespace BlazorServerApp_Server.Services
                 PreviousPage3Url = previousPage3,
                 UserId = userId,
                 DeviceType = deviceType,
+                UserGender = userGender,
                 TimeOfDayInHours = timeOfDay
             };
 

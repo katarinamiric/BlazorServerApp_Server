@@ -1,14 +1,15 @@
-﻿@page "/"
+﻿@page "/men/shoes"
 @using BlazorServerApp_Server.Services
 @using BlazorServerApp_Server.Data.Model
+@rendermode InteractiveServer
 
 @inject ProductService ProductService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Men's Shoes</PageTitle>
 
 <div class="page-container">
-    <h1 class="page-title">Welcome to Our E-commerce Store</h1>
-    <p class="page-subtitle">Curated collections for men and women.</p>
+    <h1 class="page-title">Men's Shoes</h1>
+    <p class="page-subtitle">Step up your style with our selection of shoes.</p>
 
     <div class="product-grid">
         @if (_products == null)
@@ -30,6 +31,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _products = await ProductService.GetProductsAsync();
+        _products = await ProductService.GetProductsAsync("men/shoes");
     }
 }

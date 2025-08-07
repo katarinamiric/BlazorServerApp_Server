@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using BlazorServerApp_Server.Data;
 
 // Removed the duplicate namespace BlazorServerApp_Server.Services.BlazorServerApp_Server.Services
 // Assuming NavigationRuleEngine is directly in BlazorServerApp_Server
@@ -20,6 +21,7 @@ namespace BlazorServerApp_Server
         private readonly NavigationPredictorService _navigationPredictor;
         // private readonly IServiceScopeFactory _scopeFactory; // Removed: No longer needed
         private readonly RedisPageHistoryService _redisPageHistoryService;
+        private readonly IUserService _userService;
         private HashSet<Type> _lastRegisteredPageTypes = new HashSet<Type>(); // This state is now per-request/per-user
 
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -31,7 +33,7 @@ namespace BlazorServerApp_Server
             NavigationPredictorService navigationPredictor,
             // IServiceScopeFactory scopeFactory, // Removed from constructor
             RedisPageHistoryService redisPageHistoryService,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor, IUserService userService)
         {
             _prerenderRegistry = prerenderRegistry;
             _logger = logger;
@@ -39,6 +41,7 @@ namespace BlazorServerApp_Server
             // _scopeFactory = scopeFactory; // Removed assignment
             _redisPageHistoryService = redisPageHistoryService;
             _httpContextAccessor = httpContextAccessor;
+            _userService = userService;
 
             // for (int i = 0; i < MaxHistory; i++) _pageHistory.Enqueue(""); // Removed: No longer needed
         }
@@ -54,20 +57,20 @@ namespace BlazorServerApp_Server
                 return Enumerable.Empty<string>();
             }
 
-            string userId = _httpContextAccessor.HttpContext?.Connection.Id ?? "default_anonymous_user";
+            ApplicationUser user = await _userService.GetCurrentUserAsync();
             string deviceType = RedisPageHistoryService.GetDeviceTypeFromUserAgent(
                 _httpContextAccessor.HttpContext?.Request.Headers["User-Agent"].ToString() ?? "");
 
             // Get the last 3 pages from RedisPageHistoryService
             // This will return [P3, P2, P1] where P1 is the most recent of the 3.
-            var historyArray = await _redisPageHistoryService.GetLastNPagesAsync(userId);
+            var historyArray = await _redisPageHistoryService.GetLastNPagesAsync(user.Id);
 
             string previousPage3 = historyArray[0]; // Oldest of the 3
             string previousPage2 = historyArray[1]; // Middle of the 3
             string previousPage1 = historyArray[2]; // Most recent of the 3
 
             _logger.LogInformation(
-                $"GetPagesToPrerender: Requesting ML.NET prediction for '{currentPage}' with context (P1:{previousPage1}, P2:{previousPage2}, P3:{previousPage3}, User:{userId}, Device:{deviceType}).");
+                $"GetPagesToPrerender: Requesting ML.NET prediction for '{currentPage}' with context (P1:{previousPage1}, P2:{previousPage2}, P3:{previousPage3}, User:{user.Id}, Device:{deviceType}).");
 
             // Call the prediction method from NavigationPredictorService
             // This method now returns a List<string> of top predictions
@@ -75,8 +78,9 @@ namespace BlazorServerApp_Server
                 previousPage1,
                 previousPage2,
                 previousPage3,
-                userId,
+                user.Id,
                 deviceType,
+                user.Gender,
                 maxPredictions: 3); // Request top 3 predictions
 
             var currentPageTypesToRegister = new HashSet<Type>();

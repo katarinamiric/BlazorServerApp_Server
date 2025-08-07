@@ -6,32 +6,59 @@ namespace BlazorServerApp_Server.Services
 {
     public class ProductService
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IDbContextFactory<ApplicationDbContext> _dbContextFactory;
 
-        public ProductService(ApplicationDbContext context)
+        public ProductService(IDbContextFactory<ApplicationDbContext> dbContextFactory)
         {
-            _context = context;
+            _dbContextFactory = dbContextFactory;
         }
-
         public async Task<Product?> GetProductByIdAsync(int productId)
         {
             await Task.Delay(2000);
-
-            var product = await _context.Products
+            using var context = await _dbContextFactory.CreateDbContextAsync();
+            var product = await context.Products
                 .Include(p => p.RelatedProductPairs)
-                    .ThenInclude(prp => prp.RelatedProduct)
+                .ThenInclude(prp => prp.RelatedProduct)
                 .FirstOrDefaultAsync(p => p.Id == productId);
 
             return product;
         }
+        public async Task<List<Product>> GetProductsAsync(string? categoryPath = null)
+        {
+            using var context = await _dbContextFactory.CreateDbContextAsync();
 
+            var query = context.Products
+                .Include(p => p.Category)
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(categoryPath))
+            {
+                var parts = categoryPath.Split('/');
+                if (parts.Length == 2)
+                {
+                    // Handle sub-categories like "women/shoes"
+                    var parentName = parts[0];
+                    var subName = parts[1];
+                    query = query.Where(p => p.Category.ParentCategory!.Name  == parentName &&
+                                             p.Category.Name==subName);
+                }
+                else
+                {
+                    // Handle top-level categories like "women" or "shoes"
+                    query = query.Where(p => p.Category.Name==categoryPath ||
+                                             p.Category.ParentCategory!.Name == categoryPath);
+                }
+            }
+
+            return await query.ToListAsync();
+        }
         public async Task<List<Product>> GetRelatedProductsAsync(int productId, int count = 4)
         {
             await Task.Delay(500);
-
-            var product = await _context.Products
+            using var context = await _dbContextFactory.CreateDbContextAsync();
+            var product = await context.Products
                 .Include(p => p.RelatedProductPairs)
-                    .ThenInclude(prp => prp.RelatedProduct)
+                .ThenInclude(prp => prp.RelatedProduct)
                 .FirstOrDefaultAsync(p => p.Id == productId);
 
             if (product == null)
@@ -48,34 +75,26 @@ namespace BlazorServerApp_Server.Services
 
             return relatedProducts;
         }
+
         public async Task<List<Product>> GetAllProductsAsync()
         {
+            using var context = await _dbContextFactory.CreateDbContextAsync();
+
             await Task.Delay(500);
-            return await _context.Products.ToListAsync();
+            return await context.Products.ToListAsync();
         }
 
-        public async Task AddProductAsync(Product product)
+        public async Task<List<Product>> GetDiscountedProductsAsync(string category)
         {
-            _context.Products.Add(product);
-            await _context.SaveChangesAsync();
-        }
+            using var context = await _dbContextFactory.CreateDbContextAsync();
 
-        public async Task AddRelatedProductPairAsync(int productId, int relatedProductId)
-        {
-            var existingPair = await _context.ProductRelatedProducts
-                .AnyAsync(prp => (prp.ProductId == productId && prp.RelatedProductId == relatedProductId) ||
-                                 (prp.ProductId == relatedProductId && prp.RelatedProductId == productId));
+            var query = context.Products
+                .Include(p => p.Category)
+                .Where(p => p.DiscountedPrice.HasValue) // Check if the product has a discounted price
+                .Where(p => p.Category.Name==category ||
+                            p.Category.ParentCategory!.Name==category);
 
-            //cant relate product to itself
-            if (!existingPair && productId != relatedProductId)
-            {
-                _context.ProductRelatedProducts.Add(new ProductRelatedProduct
-                {
-                    ProductId = productId,
-                    RelatedProductId = relatedProductId
-                });
-                await _context.SaveChangesAsync();
-            }
+            return await query.ToListAsync();
         }
     }
 }

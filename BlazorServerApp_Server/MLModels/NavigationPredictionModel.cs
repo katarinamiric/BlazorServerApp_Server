@@ -18,6 +18,8 @@ namespace BlazorServerApp_Server.Services // Or BlazorServerApp_Server.MLModels 
         [LoadColumn(3)] public float TimeOfDayInHours { get; set; }
         [LoadColumn(4)] public string UserId { get; set; } = string.Empty;
         [LoadColumn(5)] public string DeviceType { get; set; } = string.Empty;
+        [LoadColumn(6)] public string UserGender { get; set; } = string.Empty;
+
 
         // Label (Output for the model to predict)
         [LoadColumn(6)]
@@ -36,6 +38,7 @@ namespace BlazorServerApp_Server.Services // Or BlazorServerApp_Server.MLModels 
         [ColumnName("TimeOfDayInHours")] public float TimeOfDayInHours { get; set; }
         [ColumnName("UserId")] public string UserId { get; set; } = string.Empty;
         [ColumnName("DeviceType")] public string DeviceType { get; set; } = string.Empty;
+        [ColumnName("UserGender")] public string UserGender { get; set; } = string.Empty;
     }
 
     /// <summary>

@@ -1,0 +1,147 @@
+﻿@page "/women/discounts"
+@using BlazorServerApp_Server.Services
+@using BlazorServerApp_Server.Data.Model
+@rendermode InteractiveServer
+
+@inject ProductService ProductService
+
+<PageTitle>Women's Discounts</PageTitle>
+
+<div class="page-container">
+    <h1 class="page-title discount-title">Unbeatable Deals for Women</h1>
+    <p class="page-subtitle discount-subtitle">Don't miss out on these limited-time offers!</p>
+
+    <div class="discounts-table-container">
+        @if (_products == null)
+        {
+            <p><em>Loading...</em></p>
+        }
+        else if (!_products.Any())
+        {
+            <p>No discounted products found at this time.</p>
+        }
+        else
+        {
+            <table class="discounts-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Brand</th>
+                        <th>Original Price</th>
+                        <th>Discount Price</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var product in _products)
+                    {
+                        <tr>
+                            <td>
+                                <div class="product-cell">
+                                    <img src="@product.ImageUrl" alt="@product.Name" class="discount-image" />
+                                    <span>@product.Name</span>
+                                </div>
+                            </td>
+                            <td>@product.Brand</td>
+                            <td class="original-price">@product.Price.ToString("C")</td>
+                            <td class="discount-price">@product.DiscountedPrice!.Value.ToString("C")</td>
+                            <td>
+                                <a href="/product/@product.Id" class="buy-button">View Product</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private List<Data.Model.Product>? _products;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _products = await ProductService.GetDiscountedProductsAsync("women");
+    }
+}
+
+<!-- CSS for the new Discounts page -->
+<style>
+    .discount-title, .discount-subtitle {
+        color: #d9534f; /* A bold red color for emphasis */
+        text-align: center;
+    }
+
+    .discount-title {
+        font-size: 3rem;
+        font-weight: 700;
+        letter-spacing: 3px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .discounts-table-container {
+        overflow-x: auto;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+        background-color: #fff;
+    }
+
+    .discounts-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .discounts-table th, .discounts-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .discounts-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .discounts-table tr:hover {
+            background-color: #f1f1f1;
+        }
+
+    .product-cell {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .discount-image {
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 4px;
+    }
+
+    .original-price {
+        text-decoration: line-through;
+        color: #999;
+    }
+
+    .discount-price {
+        font-weight: 700;
+        color: #d9534f;
+    }
+
+    .buy-button {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        background-color: #007bff;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 4px;
+        transition: background-color 0.2s ease-in-out;
+    }
+
+        .buy-button:hover {
+            background-color: #0056b3;
+        }
+</style>

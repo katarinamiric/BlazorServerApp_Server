@@ -1,0 +1,78 @@
+﻿@using BlazorServerApp_Server.Data.Model
+
+<div class="product-card">
+    <a href="/product/@Product.Id">
+        <div class="product-image-container">
+            <img src="@Product.ImageUrl" alt="@Product.Name" class="product-image" />
+        </div>
+    </a>
+    <div class="product-info">
+        <a href="/product/@Product.Id" class="product-name">@Product.Name</a>
+        <div class="product-price">@Product.Price.ToString("C")</div>
+        <div class="product-brand">@Product.Brand</div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public Product Product { get; set; } = default!;
+}
+
+<!-- CSS for ProductCard.razor -->
+<style>
+    .product-card {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        background-color: #fff;
+    }
+
+    .product-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .product-image-container {
+        height: 300px;
+        overflow: hidden;
+    }
+
+    .product-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .product-info {
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .product-name {
+        font-size: 1.1rem;
+        font-weight: 500;
+        text-decoration: none;
+        color: #333;
+        transition: color 0.2s ease-in-out;
+    }
+
+    .product-name:hover {
+        color: #007bff;
+    }
+
+    .product-price {
+        margin-top: 0.5rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #555;
+    }
+
+    .product-brand {
+        font-size: 0.9rem;
+        color: #999;
+        margin-top: 0.25rem;
+    }
+</style>

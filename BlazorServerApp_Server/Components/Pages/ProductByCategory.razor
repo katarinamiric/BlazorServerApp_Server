@@ -1,0 +1,50 @@
+﻿@* @page "/{parentCategory}/{subCategory}"
+@using BlazorServerApp_Server.Services
+@using BlazorServerApp_Server.Data.Model
+@rendermode InteractiveServer
+
+@inject ProductService ProductService
+
+<PageTitle>@Title</PageTitle>
+
+<div class="page-container">
+    <h1 class="page-title">@Title</h1>
+    <p class="page-subtitle">@Subtitle</p>
+
+    <div class="product-grid">
+        @if (_products == null)
+        {
+            <p><em>Loading...</em></p>
+        }
+        else if (!_products.Any())
+        {
+            <p>No products found in this category.</p>
+        }
+        else
+        {
+            @foreach (var product in _products)
+            {
+                <ProductCard Product="@product" />
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private List<Data.Model.Product>? _products;
+
+    [Parameter]
+    public string? ParentCategory { get; set; }
+
+    [Parameter]
+    public string? SubCategory { get; set; }
+
+    private string Title => $"{ParentCategory?.ToUpper()} {SubCategory?.ToUpper()}";
+    private string Subtitle => $"Browse our exclusive collection of {SubCategory} for {ParentCategory}.";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var categoryPath = $"{ParentCategory}/{SubCategory}";
+        _products = await ProductService.GetProductsAsync(categoryPath);
+    }
+} *@
