@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using BlazorServerApp_Server.Data;
 
@@ -22,68 +23,110 @@ namespace BlazorServerApp_Server
         // private readonly IServiceScopeFactory _scopeFactory; // Removed: No longer needed
         private readonly RedisPageHistoryService _redisPageHistoryService;
         private readonly IUserService _userService;
-        private HashSet<Type> _lastRegisteredPageTypes = new HashSet<Type>(); // This state is now per-request/per-user
+        private HashSet<Type> _lastRegisteredPageTypes = new HashSet<Type>();
 
         private readonly IHttpContextAccessor _httpContextAccessor;
-        // private Queue<string> _pageHistory = new Queue<string>(3); // This was for in-memory history, now handled by RedisPageHistoryService
 
         public NavigationRuleEngine(
             RedisPrerenderRegistry prerenderRegistry,
             ILogger<NavigationRuleEngine> logger,
             NavigationPredictorService navigationPredictor,
-            // IServiceScopeFactory scopeFactory, // Removed from constructor
             RedisPageHistoryService redisPageHistoryService,
             IHttpContextAccessor httpContextAccessor, IUserService userService)
         {
             _prerenderRegistry = prerenderRegistry;
             _logger = logger;
             _navigationPredictor = navigationPredictor;
-            // _scopeFactory = scopeFactory; // Removed assignment
             _redisPageHistoryService = redisPageHistoryService;
             _httpContextAccessor = httpContextAccessor;
             _userService = userService;
-
-            // for (int i = 0; i < MaxHistory; i++) _pageHistory.Enqueue(""); // Removed: No longer needed
         }
 
         public async Task<IEnumerable<string>> GetPagesToPrerender(string? currentPage)
         {
-            // Removed: using (var scope = _scopeFactory.CreateScope())
-            // This service is now Scoped, so it's already within a request scope.
-
             if (string.IsNullOrEmpty(currentPage))
             {
                 _logger.LogInformation("GetPagesToPrerender: Current page is empty. No pages to prerender.");
                 return Enumerable.Empty<string>();
             }
 
-            ApplicationUser user = await _userService.GetCurrentUserAsync();
+            string userIdOrSession = "unknown";
+
+            var httpContext = _httpContextAccessor.HttpContext;
+
+            if (httpContext != null)
+            {
+                if (httpContext.User.Identity?.IsAuthenticated ?? false)
+                {
+                    // Authenticated user: stable user ID
+                    userIdOrSession = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                                      ?? httpContext.User.Identity.Name!;
+                }
+                else
+                {
+                    // Anonymous user: check cookie
+                    const string AnonymousUserCookieName = "anon-user-id";
+                    if (!httpContext.Request.Cookies.TryGetValue(AnonymousUserCookieName, out userIdOrSession))
+                    {
+                        userIdOrSession = Guid.NewGuid().ToString();
+                        httpContext.Response.Cookies.Append(
+                            AnonymousUserCookieName,
+                            userIdOrSession,
+                            new CookieOptions
+                            {
+                                HttpOnly = true,
+                                Expires = DateTimeOffset.UtcNow.AddYears(1),
+                                IsEssential = true,
+                                Secure = httpContext.Request.IsHttps
+                            });
+                    }
+                }
+            }
+
+            ApplicationUser? user = null;
+
+            if (_httpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated ?? false)
+            {
+                // Fetch the user entity from the database
+                user = await _userService.GetCurrentUserAsync();
+            }
+
             string deviceType = RedisPageHistoryService.GetDeviceTypeFromUserAgent(
                 _httpContextAccessor.HttpContext?.Request.Headers["User-Agent"].ToString() ?? "");
 
-            // Get the last 3 pages from RedisPageHistoryService
-            // This will return [P3, P2, P1] where P1 is the most recent of the 3.
-            var historyArray = await _redisPageHistoryService.GetLastNPagesAsync(user.Id);
+            var historyArray = await _redisPageHistoryService.GetLastNPagesAsync(userIdOrSession);
 
             string previousPage3 = historyArray[0]; // Oldest of the 3
             string previousPage2 = historyArray[1]; // Middle of the 3
             string previousPage1 = historyArray[2]; // Most recent of the 3
 
             _logger.LogInformation(
-                $"GetPagesToPrerender: Requesting ML.NET prediction for '{currentPage}' with context (P1:{previousPage1}, P2:{previousPage2}, P3:{previousPage3}, User:{user.Id}, Device:{deviceType}).");
+                $"GetPagesToPrerender: Requesting ML.NET prediction for '{currentPage}' with context (P1:{previousPage1}, P2:{previousPage2}, P3:{previousPage3}, User:5 Device:{deviceType}).");
 
             // Call the prediction method from NavigationPredictorService
             // This method now returns a List<string> of top predictions
-            var pagesToPrerender = _navigationPredictor.PredictNextPage(
-                previousPage1,
-                previousPage2,
-                previousPage3,
-                user.Id,
-                deviceType,
-                user.Gender,
-                maxPredictions: 3); // Request top 3 predictions
+            List<string> pagesToPrerender = new List<string>();
+            if (user != null)
+            {
+                pagesToPrerender = _navigationPredictor.PredictNextPage(
+                    previousPage1,
+                    previousPage2,
+                    previousPage3,
+                    deviceType,
+                    user.Gender,
+                    maxPredictions: 3); // Request top 3 predictions
+            }
+            else
+            {
+                pagesToPrerender = _navigationPredictor.PredictNextPage(
+                    previousPage1,
+                    previousPage2,
+                    previousPage3,
+                    deviceType,
+                    maxPredictions: 3); // Request top 3 predictions
+            }
 
-            var currentPageTypesToRegister = new HashSet<Type>();
+                var currentPageTypesToRegister = new HashSet<Type>();
             foreach (var targetUrl in pagesToPrerender)
             {
                 var pageType = GetPageTypeFromUrl(targetUrl);
@@ -138,6 +181,8 @@ namespace BlazorServerApp_Server
             // Assuming HeavyReportLive is the component that gets prerendered for /heavy-report
             if (normalizedUrl.Equals("/heavy-report", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Report);
             if (normalizedUrl.Contains("/product", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Product.ProductDetails);
+            if (normalizedUrl.Contains("/about", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.About);
+            if (normalizedUrl.Contains("/women/discounts", StringComparison.OrdinalIgnoreCase)) return typeof(Components.Pages.Discounts);
             // Add other page mappings as needed
             return null;
         }

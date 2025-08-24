@@ -51,7 +51,12 @@ namespace BlazorServerApp_Server.Redis
         {
             try
             {
-                var json = JsonSerializer.Serialize(value);
+                var options = new JsonSerializerOptions
+                {
+                    ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles,
+                    WriteIndented = false
+                };
+                var json = JsonSerializer.Serialize(value, options);
                 await _redisDb.StringSetAsync($"data:{key}", json, expiry);
                 _logger.LogInformation($"Cached data for key: data:{key}");
             }

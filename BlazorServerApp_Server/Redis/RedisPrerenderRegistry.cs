@@ -13,7 +13,7 @@ namespace BlazorServerApp_Server.Redis
         private static readonly Dictionary<string, Type> _tableToComponentMapping =
             new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
             {
-                { "Weather", typeof(BlazorServerApp_Server.Components.Pages.Weather) },
+                { "Products", typeof(BlazorServerApp_Server.Components.Pages.Home) },
                 { "Report", typeof(BlazorServerApp_Server.Components.Pages.ReportPrerendered) },
             };
 

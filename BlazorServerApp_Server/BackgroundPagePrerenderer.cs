@@ -96,6 +96,15 @@ namespace BlazorServerApp_Server
                         data.DataSource = "Server Prerendered (fetched)"; 
                         return data;
                     }
+                },
+                {
+                    typeof(Discounts),
+                    async (sp) =>
+                    {
+                        var reportService = sp.GetRequiredService<ProductService>();
+                        var data = await reportService.GetDiscountedProductsAsync("women");
+                        return data;
+                    }
                 }
                 // Add more pages here as you expand your application:
                 // {

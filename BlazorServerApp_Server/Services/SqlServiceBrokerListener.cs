@@ -12,7 +12,7 @@ namespace BlazorServerApp_Server.Services
         private readonly IHubContext<WeatherHub> _hubContext;
         private readonly ILogger<SqlServiceBrokerListener> _logger;
         private readonly string _connectionString;
-        private readonly string _targetQueueName = "WeatherForecastChange_TargetQueue";
+        private readonly string _targetQueueName = "ProductChange_TargetQueue";
         private readonly IServiceScopeFactory _scopeFactory; 
 
         public SqlServiceBrokerListener(

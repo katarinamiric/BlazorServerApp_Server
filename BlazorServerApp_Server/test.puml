@@ -1,0 +1,54 @@
+@startuml
+!theme mars
+
+title Blazor Class & Component Diagram
+
+skinparam linetype ortho
+
+database "Redis Cache" as Redis
+
+package "BlazorApp" {
+    class Program << Entry Point >>
+
+    component "Pages" as Pages {
+        class About {
+            - string cachedHtml
+            - bool isLoading
+            + OnInitializedAsync()
+        }
+        About ..> RedisHtmlCache : @inject
+
+        class HeavyReport {
+            - string cachedHtml
+            - bool isLoading
+            + OnInitializedAsync()
+        }
+        HeavyReport ..> RedisHtmlCache : @inject
+    }
+
+    component "Shared Components" as Components {
+        class AboutContent
+        class Report
+    }
+
+    component "Services" as Services {
+        class RedisHtmlCache {
+            + GetHtmlAsync()
+            + ClearHtmlAsync()
+            + ClearStringArrayDataAsync()
+        }
+        RedisHtmlCache ..> Redis : uses
+        
+        class BackgroundPrerenderer << Background Service >> {
+            + ExecuteAsync()
+        }
+    }
+}
+
+Program --> Pages : Renders
+Program --> Services : Registers
+BackgroundPrerenderer --> RedisHtmlCache : uses
+BackgroundPrerenderer ..> AboutContent : renders
+BackgroundPrerenderer ..> Report : renders
+
+@enduml

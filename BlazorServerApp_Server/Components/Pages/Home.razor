@@ -1,35 +1,126 @@
 ﻿@page "/"
 @using BlazorServerApp_Server.Services
 @using BlazorServerApp_Server.Data.Model
-
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject ProductService ProductService
 
 <PageTitle>Home</PageTitle>
 
-<div class="page-container">
-    <h1 class="page-title">Welcome to Our E-commerce Store</h1>
-    <p class="page-subtitle">Curated collections for men and women.</p>
+<style>
+    .page-container {
+        font-family: 'Inter', sans-serif;
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
 
-    <div class="product-grid">
-        @if (_products == null)
-        {
-            <p><em>Loading...</em></p>
+    .page-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #333;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .page-subtitle {
+        font-size: 1.25rem;
+        color: #666;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .section-title {
+        font-size: 2rem;
+        font-weight: 600;
+        color: #555;
+        border-bottom: 2px solid #ddd;
+        padding-bottom: 0.5rem;
+        margin-top: 3rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 2rem;
+        justify-content: center;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    @@media (max-width: 768px) {
+        .product-grid {
+            grid-template-columns: 1fr;
         }
-        else
+    }
+</style>
+
+<div class="page-container">
+    <h1 class="page-title">Welcome to Style</h1>
+
+    @if (_allProducts == null)
+    {
+        <p><em>Loading products...</em></p>
+    }
+    else
+    {
+        @if (_womenProducts != null && _womenProducts.Any())
         {
-            @foreach (var product in _products)
-            {
-                <ProductCard Product="@product" />
-            }
+            <h2 class="section-title">Women's Collection</h2>
+            <div class="product-grid">
+                @foreach (var product in _womenProducts)
+                {
+                    <ProductCard Product="@product" />
+                }
+            </div>
         }
-    </div>
+
+        @if (_menProducts != null && _menProducts.Any())
+        {
+            <h2 class="section-title">Men's Collection</h2>
+            <div class="product-grid">
+                @foreach (var product in _menProducts)
+                {
+                    <ProductCard Product="@product" />
+                }
+            </div>
+        }
+
+        @if (_discountProducts != null && _discountProducts.Any())
+        {
+            <h2 class="section-title">Best Discounts</h2>
+            <div class="product-grid">
+                @foreach (var product in _discountProducts)
+                {
+                    <ProductCard Product="@product" />
+                }
+            </div>
+        }
+
+        @if (!_allProducts.Any())
+        {
+            <p>No products available at this time.</p>
+        }
+    }
 </div>
 
 @code {
-    private List<Data.Model.Product>? _products;
+    private List<Data.Model.Product>? _allProducts;
+    private List<Data.Model.Product>? _womenProducts;
+    private List<Data.Model.Product>? _menProducts;
+    private List<Data.Model.Product>? _discountProducts;
 
     protected override async Task OnInitializedAsync()
     {
-        _products = await ProductService.GetProductsAsync();
+        _allProducts = await ProductService.GetProductsAsync();
+
+        if (_allProducts != null)
+        {
+            _womenProducts = _allProducts.Where(p => p.Category.Name == "Women").Take(3).ToList();
+            _menProducts = _allProducts.Where(p => p.Category.Name == "Men").Take(3).ToList();
+            _discountProducts = _allProducts.Where(p => p.DiscountedPrice > 0).Take(3).ToList();
+        }
     }
 }

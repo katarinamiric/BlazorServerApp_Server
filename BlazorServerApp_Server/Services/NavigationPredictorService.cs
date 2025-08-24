@@ -31,24 +31,18 @@ namespace BlazorServerApp_Server.Services
             _redisPageHistoryService = redisPageHistoryService; // Assign
         }
 
-
-        // This method will be called periodically by the timer
         public async Task TrainModelPeriodicallyAsync()
         {
             _logger.LogInformation("NavigationPredictorService: Starting periodic model training...");
 
-            // Fetch training data from the database via RedisPageHistoryService
             List<AdvancedNavigationLogEntry> trainingData = await _redisPageHistoryService.GetAllAdvancedNavigationLogEntriesAsync();
 
             if (trainingData == null || !trainingData.Any())
             {
                 _logger.LogWarning("NavigationPredictorService: No training data available from database. Skipping model training.");
-                // IMPORTANT: If no data is available, _trainedModel and _predictionEngine will remain null
-                // or use the last successfully trained model. Consider a fallback or initial dummy data.
                 return;
             }
 
-            // Populate _allPossiblePageUrls from the training data
             _allPossiblePageUrls.Clear();
             foreach (var entry in trainingData)
             {
@@ -57,12 +51,12 @@ namespace BlazorServerApp_Server.Services
                 _allPossiblePageUrls.Add(entry.PreviousPage3Url);
                 _allPossiblePageUrls.Add(entry.NextPageUrl);
             }
-            _allPossiblePageUrls.Remove(""); // Remove empty string if present
+            _allPossiblePageUrls.Remove("");
 
             _logger.LogInformation(
                 $"Loaded {trainingData.Count} advanced training entries from DB. Known pages for prediction: {string.Join(", ", _allPossiblePageUrls)}");
 
-            TrainModel(trainingData); // Call the actual training logic
+            TrainModel(trainingData);
         }
 
         private void LoadAllPossiblePageUrls()
@@ -202,60 +196,56 @@ namespace BlazorServerApp_Server.Services
 
         private void TrainModel(List<AdvancedNavigationLogEntry> trainingData)
         {
+            trainingData.ForEach(x =>
+            {
+                if (string.IsNullOrWhiteSpace(x.PreviousPage1Url)) x.PreviousPage1Url = "UnknownPage";
+                if (string.IsNullOrWhiteSpace(x.PreviousPage2Url)) x.PreviousPage2Url = "UnknownPage";
+                if (string.IsNullOrWhiteSpace(x.PreviousPage3Url)) x.PreviousPage3Url = "UnknownPage";
+                if (string.IsNullOrWhiteSpace(x.DeviceType)) x.DeviceType = "UnknownDevice";
+                if (string.IsNullOrWhiteSpace(x.UserGender)) x.UserGender = "UnknownGender";
+                if (string.IsNullOrWhiteSpace(x.NextPageUrl)) x.NextPageUrl = "UnknownNextPage";
+            });
+
             IDataView dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
 
             var pipeline = _mlContext.Transforms.Conversion
                 .MapValueToKey("Label", "Label")
 
-                // 1. Map string values to numeric keys
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("PreviousPage1UrlKey", "PreviousPage1Url"))
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("PreviousPage2UrlKey", "PreviousPage2Url"))
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("PreviousPage3UrlKey", "PreviousPage3Url"))
-                .Append(_mlContext.Transforms.Conversion.MapValueToKey("UserIdKey", "UserId"))
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("DeviceTypeKey", "DeviceType"))
                 .Append(_mlContext.Transforms.Conversion.MapValueToKey("UserGenderKey", "UserGender"))
 
-                // 2. One-hot encode these numeric keys into sparse vectors
-                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("PreviousPage1UrlEncoded",
-                    "PreviousPage1UrlKey"))
-                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("PreviousPage2UrlEncoded",
-                    "PreviousPage2UrlKey"))
-                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("PreviousPage3UrlEncoded",
-                    "PreviousPage3UrlKey"))
-                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("UserIdEncoded", "UserIdKey"))
+                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("PreviousPage1UrlEncoded", "PreviousPage1UrlKey"))
+                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("PreviousPage2UrlEncoded", "PreviousPage2UrlKey"))
+                .Append(_mlContext.Transforms.Categorical.OneHotEncoding("PreviousPage3UrlEncoded", "PreviousPage3UrlKey"))
                 .Append(_mlContext.Transforms.Categorical.OneHotEncoding("DeviceTypeEncoded", "DeviceTypeKey"))
                 .Append(_mlContext.Transforms.Categorical.OneHotEncoding("UserGenderEncoded", "UserGenderKey"))
 
-                // Concatenate all features into a single 'Features' vector required by the trainer
-                // Include numerical features directly (TimeOfDayInHours)
                 .Append(_mlContext.Transforms.Concatenate("Features",
                     "PreviousPage1UrlEncoded",
                     "PreviousPage2UrlEncoded",
                     "PreviousPage3UrlEncoded",
-                    "UserIdEncoded",
                     "DeviceTypeEncoded",
                     "UserGenderEncoded",
-                    "TimeOfDayInHours")) // Numerical feature directly included
-                .AppendCacheCheckpoint(_mlContext) // Cache data for faster training
+                    "TimeOfDayInHours"))
 
-                // Choose your multi-class classification trainer
-                // LightGBM is generally fast and accurate
+                .AppendCacheCheckpoint(_mlContext)
+
                 .Append(_mlContext.MulticlassClassification.Trainers.LightGbm("Label", "Features"))
-                // Or FastTree if preferred:
-                // .Append(_mlContext.MulticlassClassification.Trainers.FastTreeOva("Label", "Features")) // OVA (One-vs-All) for multi-class
-                .Append(_mlContext.Transforms.Conversion
-                    .MapKeyToValue("PredictedLabel")); // Map numeric prediction back to original string label
+
+                .Append(_mlContext.Transforms.Conversion.MapKeyToValue("PredictedLabel", "PredictedLabel"));
 
             _logger.LogInformation("NavigationPredictorService: Training advanced ML.NET model...");
-            _trainedModel = pipeline.Fit(dataView); // Train the model
+            _trainedModel = pipeline.Fit(dataView);
 
             _logger.LogInformation("NavigationPredictorService: Model training complete.");
 
-            // Create a prediction engine for making predictions
             _predictionEngine =
-                _mlContext.Model.CreatePredictionEngine<AdvancedNavigationLogEntry, NavigationPredictionOutput>(
-                    _trainedModel);
+                _mlContext.Model.CreatePredictionEngine<AdvancedNavigationLogEntry, NavigationPredictionOutput>(_trainedModel);
         }
+
 
 
         //private void SaveModel()
@@ -290,7 +280,7 @@ namespace BlazorServerApp_Server.Services
         /// Predicts the most likely next pages based on the trained ML.NET model,
         /// considering last 3 pages, time of day, user ID, and device type.
         /// </summary>
-        public List<string> PredictNextPage(string previousPage1, string previousPage2, string previousPage3, string userId, string userGender, string deviceType, int maxPredictions = 3)
+        public List<string> PredictNextPage(string previousPage1, string previousPage2, string previousPage3, string deviceType, string userGender = null, int maxPredictions = 3)
         {
             if (_predictionEngine == null)
             {
@@ -306,7 +296,6 @@ namespace BlazorServerApp_Server.Services
                 PreviousPage1Url = previousPage1,
                 PreviousPage2Url = previousPage2,
                 PreviousPage3Url = previousPage3,
-                UserId = userId,
                 DeviceType = deviceType,
                 UserGender = userGender,
                 TimeOfDayInHours = timeOfDay
@@ -342,7 +331,7 @@ namespace BlazorServerApp_Server.Services
                 .Select(x => x.Url)
                 .ToList();
 
-            _logger.LogInformation($"Prediction for User: {userId}, Device: {deviceType}, History: {previousPage3} -> {previousPage2} -> {previousPage1} -> Top {maxPredictions} Predicted: {string.Join(", ", topPredictions)}");
+            _logger.LogInformation($"Prediction for Device: {deviceType}, History: {previousPage3} -> {previousPage2} -> {previousPage1} -> Top {maxPredictions} Predicted: {string.Join(", ", topPredictions)}");
 
             return topPredictions;
         }

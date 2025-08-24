@@ -57,7 +57,6 @@ namespace BlazorServerApp_Server.Services
                         PreviousPage2Url = historyValues[2].ToString(), 
                         PreviousPage3Url = historyValues[3].ToString(), 
                         TimeOfDayInHours = (float)DateTime.UtcNow.TimeOfDay.TotalHours, 
-                        UserId = userId,
                         DeviceType = deviceType,
                         NextPageUrl = historyValues[0].ToString() 
                     };
@@ -109,7 +108,7 @@ namespace BlazorServerApp_Server.Services
             {
                 context.AdvancedNavigationLogEntries.Add(entry);
                 await context.SaveChangesAsync();
-                _logger.LogDebug($"Saved AdvancedNavigationLogEntry to DB for user {entry.UserId}. Next page: {entry.NextPageUrl}");
+                _logger.LogDebug($"Saved AdvancedNavigationLogEntry to DB for user {entry.Id}. Next page: {entry.NextPageUrl}");
             }
         }
 

@@ -20,7 +20,7 @@
             _logger.LogInformation("Model Training Background Service is starting.");
 
             _logger.LogInformation("Triggering initial ML model training at application startup.");
-            await _predictorService.TrainModelPeriodicallyAsync();
+           await _predictorService.TrainModelPeriodicallyAsync();
 
             while (!stoppingToken.IsCancellationRequested)
             {

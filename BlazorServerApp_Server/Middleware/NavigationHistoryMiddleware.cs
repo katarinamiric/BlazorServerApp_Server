@@ -1,4 +1,5 @@
-﻿using BlazorServerApp_Server.Services;
+﻿using System.Security.Claims;
+using BlazorServerApp_Server.Services;
 
 namespace BlazorServerApp_Server.Middleware
 {
@@ -6,6 +7,7 @@ namespace BlazorServerApp_Server.Middleware
     {
         private readonly RequestDelegate _next;
         private readonly ILogger<NavigationHistoryMiddleware> _logger;
+        private const string AnonymousUserCookieName = "anon-user-id";
 
         public NavigationHistoryMiddleware(RequestDelegate next, ILogger<NavigationHistoryMiddleware> logger)
         {
@@ -23,9 +25,34 @@ namespace BlazorServerApp_Server.Middleware
 
             if (isPageRequest)
             {
+                string userId;
+
+                if (context.User.Identity?.IsAuthenticated ?? false)
+                {
+                    userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                             ?? context.User.Identity.Name!;
+                }
+                else
+                {
+                    if (!context.Request.Cookies.TryGetValue(AnonymousUserCookieName, out userId))
+                    {
+                        userId = Guid.NewGuid().ToString();
+
+                        context.Response.Cookies.Append(
+                            AnonymousUserCookieName,
+                            userId,
+                            new CookieOptions
+                            {
+                                HttpOnly = true,
+                                Expires = DateTimeOffset.UtcNow.AddYears(1),
+                                IsEssential = true,
+                                Secure = context.Request.IsHttps
+                            });
+                    }
+                }
+
                 var pageHistoryService = context.RequestServices.GetRequiredService<RedisPageHistoryService>();
 
-                string userId = context.Connection.Id; //samo za svrhu demonstracije
                 string pageUrl = context.Request.Path.Value!;
                 string deviceType = RedisPageHistoryService.GetDeviceTypeFromUserAgent(context.Request.Headers["User-Agent"].ToString());
 
@@ -33,7 +60,7 @@ namespace BlazorServerApp_Server.Middleware
                 {
                     await pageHistoryService.AddPageVisitAsync(userId, pageUrl, deviceType);
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error logging page visit in middleware.");
                 }

@@ -1,11 +1,47 @@
-﻿@page "/women/discounts"
-@using BlazorServerApp_Server.Services
+﻿@using BlazorServerApp_Server.Services
 @using BlazorServerApp_Server.Data.Model
-@rendermode InteractiveServer
-
+@using BlazorServerApp_Server.Redis
+@inject RedisHtmlCache Cache
 @inject ProductService ProductService
 
 <PageTitle>Women's Discounts</PageTitle>
+<div class="background-video-section">
+    <video autoplay muted loop playsinline class="background-video">
+        <source src="https://www.w3schools.com/howto/rain.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    <div class="overlay-text">
+        <h2>Live Fashion Show</h2>
+        <p>Experience the atmosphere as if you were there!</p>
+    </div>
+</div>
+
+<style>
+    .background-video-section {
+        position: relative;
+        height: 400px;
+        overflow: hidden;
+        margin: 2rem 0;
+    }
+
+    .background-video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .overlay-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        text-align: center;
+        background: rgba(0,0,0,0.5);
+        padding: 1rem 2rem;
+        border-radius: 8px;
+    }
+</style>
 
 <div class="page-container">
     <h1 class="page-title discount-title">Unbeatable Deals for Women</h1>
@@ -61,7 +97,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _products = await ProductService.GetDiscountedProductsAsync("women");
+        Thread.Sleep(1000);
+        var discounts = await Cache.TryGetDataAsync<List<Data.Model.Product>>("Discounts");
+        if (discounts == null)
+        {
+            _products = await ProductService.GetDiscountedProductsAsync("women");
+        }
     }
 }
 

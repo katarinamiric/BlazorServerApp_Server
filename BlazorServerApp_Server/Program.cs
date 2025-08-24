@@ -1,19 +1,17 @@
+using BlazorServerApp.Components.Account;
 using BlazorServerApp_Server;
 using BlazorServerApp_Server.Components;
-using BlazorServerApp_Server.Components.Pages;
 using BlazorServerApp_Server.Data;
-using BlazorServerApp_Server.Data.Model;
 using BlazorServerApp_Server.Hubs.BlazorServerApp_Server.Hubs;
 using BlazorServerApp_Server.Middleware;
 using BlazorServerApp_Server.Redis;
 using BlazorServerApp_Server.Services;
 using BlazorServerApp_Server.Services.BlazorServerApp_Server.Services;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
-using StackExchange.Redis;
-using System;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
+using ApplicationUser = BlazorServerApp_Server.Data.ApplicationUser;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +33,13 @@ builder.Services.AddScoped<BrowserHistoryService>();
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<DataSeeder>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
 
 // Program.cs
 builder.Services.AddSingleton<RedisPageHistoryService>();
@@ -47,14 +52,6 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<PrerenderRegistry>();
 builder.Services.AddScoped<ReportDataService>();
 builder.Services.AddScoped<IUserService, UserService>();
-//var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-//builder.Services.AddDbContext<ApplicationDbContext>(options =>
-//    options.UseSqlServer(connectionString));
-
-//builder.Services.AddDbContext<ApplicationDbContext>(options =>
-//{
-//    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
-//});
 
 builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 {
@@ -64,49 +61,42 @@ builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
 builder.Services.AddHostedService<ModelTrainingBackgroundService>();
 
 
-// --- Configure Redis ---
-// Get Redis connection string from appsettings.json
+
 var redisConnectionString = builder.Configuration.GetConnectionString("RedisConnection");
 if (string.IsNullOrEmpty(redisConnectionString))
 {
     Console.WriteLine("Warning: RedisConnection string is not configured in appsettings.json. Redis cache will not be used.");
-    // Fallback to in-memory if Redis not configured, or throw error based on preference.
-    // For this example, we'll proceed assuming it's configured.
 }
+
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 {
-    // Configure your Redis connection here
-    // Example: "localhost:6379" or "yourredis.azure.com:6380,password=YOUR_PASSWORD,ssl=True,abortConnect=False"
     return ConnectionMultiplexer.Connect(redisConnectionString ?? "localhost:6379");
 });
+
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddScoped<IdentityUserAccessor>();
+builder.Services.AddScoped<IdentityRedirectManager>();
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = IdentityConstants.ApplicationScheme;
     options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
 }).AddIdentityCookies();
-builder.Services.AddIdentityCore<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
+builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = true)
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-//builder.Services.AddIdentityCore<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
-//    .AddEntityFrameworkStores<ApplicationDbContext>()
-//    .AddSignInManager()
-//    .AddDefaultTokenProviders();
-
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    //app.UseMigrationsEndPoint();
-    // Seed the database
     using (var scope = app.Services.CreateScope())
     {
         var services = scope.ServiceProvider;
-        var dataSeeder = scope.ServiceProvider.GetRequiredService<DataSeeder>(); // Get the DataSeeder
+        var dataSeeder = scope.ServiceProvider.GetRequiredService<DataSeeder>(); 
         try
         {
             var context = services.GetRequiredService<ApplicationDbContext>();
@@ -122,16 +112,18 @@ if (app.Environment.IsDevelopment())
     }
 
     app.UseExceptionHandler("/Weather2", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-app.UseNavigationHistory();
+
 app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseSession();
+app.UseNavigationHistory();
 
 app.UseAntiforgery();
 app.MapHub<WeatherHub>("/weatherhub");

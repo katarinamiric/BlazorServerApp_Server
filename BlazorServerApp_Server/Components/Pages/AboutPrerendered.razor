@@ -1,0 +1,60 @@
+﻿@page "/about"
+@using BlazorServerApp_Server.Redis
+@using Microsoft.Identity.Client
+@inject RedisHtmlCache Cache
+
+<PageTitle>About</PageTitle>
+
+@if (isLoading)
+{
+    <p><em>Loading page from cache...</em></p>
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+@* else if (hasCachedHtml && !string.IsNullOrEmpty(cachedHtml))
+{
+    <p> Its prerendered</p>
+
+    <p><em>Displaying content from Redis cache.</em></p>
+    @((MarkupString)cachedHtml)
+}
+else
+{ *@
+    <p> Its not prerendered</p>
+    <About></About>
+@* } *@
+
+@code {
+    private string? cachedHtml;
+    private bool hasCachedHtml = false;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        try
+        {
+            string? html = await Cache.GetHtmlAsync("About");
+
+            if (!string.IsNullOrEmpty(html))
+            {
+                cachedHtml = html;
+                hasCachedHtml = true;
+            }
+            else
+            {
+                hasCachedHtml = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            hasCachedHtml = false;
+            cachedHtml = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
